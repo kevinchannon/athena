@@ -195,7 +195,7 @@ Beyond initial implementation:
 ## Installation
 
 ```bash
-pipx install ack
+pipx install athenacode
 ```
 
 ## Usage Workflow
