@@ -1,6 +1,5 @@
-def main():
-    print("Hello from athena!")
+from athena.cli import app
 
 
 if __name__ == "__main__":
-    main()
+    app()
