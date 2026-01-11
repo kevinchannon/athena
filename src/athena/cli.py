@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sys
 from dataclasses import asdict
 
 import typer
@@ -7,7 +8,26 @@ import typer
 from athena.locate import locate_entity
 from athena.repository import RepositoryNotFoundError
 
-app = typer.Typer(help="Athena Code Knowledge - semantic code analysis tool")
+app = typer.Typer(
+    help="Athena Code Knowledge - semantic code analysis tool",
+    no_args_is_help=False,
+)
+
+
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context, entity_name: str = typer.Argument(None, help="Entity name to locate")):
+    """Athena Code Knowledge - semantic code analysis tool.
+
+    When called without a subcommand, assumes 'locate' command for backward compatibility.
+    """
+    if ctx.invoked_subcommand is None:
+        if entity_name is None:
+            # No entity name and no subcommand - show help
+            typer.echo(ctx.get_help())
+            raise typer.Exit()
+        else:
+            # Entity name provided without subcommand - run locate
+            ctx.invoke(locate, entity_name=entity_name)
 
 
 @app.command()
