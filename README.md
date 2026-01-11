@@ -1,5 +1,3 @@
-# Athena
-
 Work in Progress!
 
 # Athena Code Knowledge (`ack`)
