@@ -89,8 +89,8 @@ uv run -m athena
 ### Testing
 
 ```bash
-# Run all tests
-uv run pytest
+# Run all tests (via tasktree)
+tt test
 
 # Run with coverage
 uv run pytest --cov=athena

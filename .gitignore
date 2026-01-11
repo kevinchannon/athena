@@ -70,3 +70,4 @@ dmypy.json
 .pytype/
 
 requirements/*
+/.tasktree-state

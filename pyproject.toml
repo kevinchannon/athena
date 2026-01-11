@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "athena"
-version = "0.1.0"
+version = "0.0.1"
 description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
@@ -19,9 +19,11 @@ ack = "athena.cli:app"
 
 [project.optional-dependencies]
 dev = [
+    "build",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-asyncio>=0.23.0",
+    "tasktree"
 ]
 
 [tool.setuptools.packages.find]
