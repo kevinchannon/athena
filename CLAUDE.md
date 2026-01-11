@@ -1,143 +1,60 @@
 # Athena Project Context
 
-This document provides context and guidelines for working on the Athena project.
+## Overview
 
-## Project Overview
+Python 3.12+ project using uv for dependency management, src-layout (PEP 420), pytest testing.
 
-Athena is a Python project using modern Python packaging standards with uv for dependency management.
+**Goal:** Maximize Claude Code efficiency—minimal token usage, maximum code quality.
 
-## Project Structure
+## Structure
 
 ```
 athena/
-├── src/athena/          # Main package source code
-│   ├── __init__.py      # Package initialization and version
-│   └── __main__.py      # Entry point for `python -m athena`
-├── tests/               # Test suite
-│   ├── __init__.py
-│   └── test_athena.py   # Tests for the package
-├── .venv/               # Virtual environment (managed by uv)
-├── .gitignore           # Git ignore patterns
-├── README.md            # User-facing documentation
-├── pyproject.toml       # Project configuration and dependencies
-└── CLAUDE.md            # This file - context for Claude Code
+├── src/athena/       # Source (version in __init__.py)
+├── tests/            # pytest tests
+├── pyproject.toml    # Config/deps
+└── CLAUDE.md         # This file
 ```
 
-## IMPORTANT! Development philosophies
+## Critical Development Principles
 
-### Small, incremental changes
-The project team requires that each commit contains a small number of changes. Ideally, just the addition of a new line or statement in the code and an accompanying unit test (or tests) that validate the functionality of that line.
+### 1. Small Incremental Commits
 
-Tickets and features should be iteratively broken down until they can be implemented as a series of small commits.
+- **One logical change per commit** (1 line + tests ideal)
+- Break features into smallest viable steps
+- **Local work:** Stop after each change for user review/commit
+- **GitHub integration:** Auto-commit each increment to feature branch
+- Estimate tokens before proceeding: “Next: ~X tokens, remaining: Y”
 
-When prompting the user to move to the next stage, estimate the size of the work and indicate whether you think there is sufficient usage to implement the next stage, or not. ("estimated required tokens: X, remaining usage in this session: Y tokens")
+### 2. Tests Over Scripts
 
-#### Local Claude Code work 
-When working locally on a user's machine, Claude Code should NEVER make commits - only stop and ask the user to review and commit, before carrying on with the next incremental change.
+- **Never** write ad hoc test scripts to validate features
+- Write proper unit/integration/E2E tests and run them
+- Investigate via existing tests when possible
+- Plan E2E tests early—validate incrementally
 
-#### GitHub Claude Code integration work
-When working as a GitHub agent, claude should still BREAK DOWN THE TASK into small, incremental commits, but commit those changes to the feature branch as they are made. GitHub integration Claude Code does not need to ask for permission to commit each change.
+### 3. Efficiency
 
-### Write tests, not ad hoc test scripts
-If you are checking that a feature you are implementing has been implemented correctly, DO NOT write a bespoke test script to check the output of the app with the new functionality. INSTEAD, write a unit/integration/end-to-end test that will confirm you have correctly implemented the feature and RUN JUST THAT TEST. If it passes, you have implemented things correctly; and you can either carry on with additional parts of the feature, or run all the tests to ensure no regressions.
+- Minimize token usage ruthlessly
+- Avoid reading entire files unless necessary
+- Use targeted queries and focused changes
 
-It is still permissible to write and run an ad hoc script to investigate/confirm the current behaviour. Although, it is better to first search for a test that does the thing that you're investigating. If one exists and is passing: then the app does the thing.
+### 4. Architecture (SOLID + Clean Code)
 
-### Test as we go!
-- We do not plan to implement all the code (maybe even with unit tests) and then write a bunch of integration tests.
-- We PLAN END-TO-END incremental changes.
-  - Write high-level test of the functionality as early as possible, to ensure that the new feature is progressing as expected.
+- Small, named functions over comments
+- Abstract logic from types (Liskov substitution)
+- Comment WHY, not WHAT (refactor to named functions instead)
 
-### Try to be efficient with token usage
-Your sponsor is not made of money! Try to minimise token useage, so that we can maximise the effectiveness of Claude Code on a features per token basis. Obviously, if a thing needs doing and it takes a bunch of tokens, that's just the way it is. Just try to consider/avoid profligacy!
-
-### Architectural philosophies
-
-- Try to follow SOLID principles
-- Try to follow the advice in "Clean Code", by Robert Martin.
-- Try to keep algorithmic logic abstracted from the TYPES that the logic can be run on. This is a restatement of the Liskov Substitution principle covered in the SOLID principles
-- **Small, named functions are preferred over comments**.  If a comment on WHAT the code is doing feels warranted, then refactor that code into a function with an indicative name.
-- Comments on WHY code is like it is are more permissible.
-
-## Technology Stack
-
-- **Python**: 3.12+
-- **Package Manager**: uv
-- **Build System**: setuptools
-- **Testing**: pytest
-- **Project Layout**: src-layout (PEP 420)
-
-## Development Workflow
-
-### Environment Setup
-
-Task tree (tt) is installed and can be used where possible
+## Quick Commands
 
 ```bash
-# Sync dependencies/install dev dependencies
-tt dev-setup
+tt dev-setup   # Sync deps
+tt test        # Run tests
+uv run -m athena  # Run app
 ```
-
-### Running the Application
-
-```bash
-# Run the main module
-uv run python -m athena
-
-# Or shorthand
-uv run -m athena
-```
-
-### Testing
-
-```bash
-# Run all tests (via tasktree)
-tt test
-
-# Run with coverage
-uv run pytest --cov=athena
-```
-
-## Coding Conventions
-
-- Follow PEP 8 style guide
-- Use type hints where appropriate
-- Keep the src-layout structure
-- All source code goes in `src/athena/`
-- All tests go in `tests/`
 
 ## Adding Dependencies
 
-Add dependencies to `pyproject.toml`:
+Edit `pyproject.toml` → `tt dev-setup`
 
-```toml
-dependencies = [
-    "package-name>=version",
-]
-```
-
-For dev dependencies:
-
-```toml
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "new-dev-tool>=1.0",
-]
-```
-
-Then sync:
-
-```bash
-tt dev-setup
-```
-
-## Project Goals
-
-Make Claude Code more efficient at translating ideas into great code by providing maximum useful code knowledge for minimal input tokens
-
-## Notes
-
-- This project uses the src-layout pattern for better isolation and testing
-- uv manages the virtual environment in `.venv/`
-- Version is defined in both `pyproject.toml` and `src/athena/__init__.py`
+**Dev deps:** Use `[project.optional-dependencies] dev = [...]`
