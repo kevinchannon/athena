@@ -48,3 +48,41 @@ def mcp_server():
     from athena.mcp_server import main
 
     asyncio.run(main())
+
+
+@app.command()
+def install_mcp():
+    """Install MCP server configuration for Claude Code.
+
+    This command automatically configures Claude Code to use the Athena
+    MCP server by adding the appropriate entry to the Claude config file.
+    """
+    from athena.mcp_config import install_mcp_config
+
+    success, message = install_mcp_config()
+
+    if success:
+        typer.echo(f"✓ {message}")
+        typer.echo("\nRestart Claude Code for changes to take effect.")
+    else:
+        typer.echo(f"✗ {message}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def uninstall_mcp():
+    """Remove MCP server configuration from Claude Code.
+
+    This command removes the Athena MCP server entry from the Claude
+    configuration file.
+    """
+    from athena.mcp_config import uninstall_mcp_config
+
+    success, message = uninstall_mcp_config()
+
+    if success:
+        typer.echo(f"✓ {message}")
+        typer.echo("\nRestart Claude Code for changes to take effect.")
+    else:
+        typer.echo(f"✗ {message}", err=True)
+        raise typer.Exit(code=1)

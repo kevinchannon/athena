@@ -21,6 +21,20 @@ def test_app_has_mcp_server_command():
     assert "mcp-server" in result.stdout
 
 
+def test_app_has_install_mcp_command():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "install-mcp" in result.stdout
+
+
+def test_app_has_uninstall_mcp_command():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "uninstall-mcp" in result.stdout
+
+
 def test_locate_command_requires_entity_name():
     # Should fail without entity name argument
     result = runner.invoke(app, [])
