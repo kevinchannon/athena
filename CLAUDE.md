@@ -43,8 +43,10 @@ If you are checking that a feature you are implementing has been implemented cor
 
 It is still permissible to write and run an ad hoc script to investigate/confirm the current behaviour. Although, it is better to first search for a test that does the thing that you're investigating. If one exists and is passing: then the app does the thing.
 
-### Testas we go!
-We do not plan to implement all the code (maybe even with unit tests) and then write a bunch of integration tests. We PLAN END-TO-END incremental changes. This will involve writing high-level test of the functionality as early as possible, to ensure that the new feature is progressing as expected.
+### Test as we go!
+- We do not plan to implement all the code (maybe even with unit tests) and then write a bunch of integration tests.
+- We PLAN END-TO-END incremental changes.
+  - Write high-level test of the functionality as early as possible, to ensure that the new feature is progressing as expected.
 
 ### Try to be efficient with token usage
 Your sponsor is not made of money! Try to minimise token useage, so that we can maximise the effectiveness of Claude Code on a features per token basis. Obviously, if a thing needs doing and it takes a bunch of tokens, that's just the way it is. Just try to consider/avoid profligacy!
@@ -54,7 +56,8 @@ Your sponsor is not made of money! Try to minimise token useage, so that we can 
 - Try to follow SOLID principles
 - Try to follow the advice in "Clean Code", by Robert Martin.
 - Try to keep algorithmic logic abstracted from the TYPES that the logic can be run on. This is a restatement of the Liskov Substitution principle covered in the SOLID principles
-- **Small, named functions are preferred over comments**.  If a comment on WHAT the code is doing feels warranted, then refactor that code into a function with an indicative name.  Comment on WHY code is like it is are more permissible.
+- **Small, named functions are preferred over comments**.  If a comment on WHAT the code is doing feels warranted, then refactor that code into a function with an indicative name.
+- Comments on WHY code is like it is are more permissible.
 
 ## Technology Stack
 
@@ -68,12 +71,11 @@ Your sponsor is not made of money! Try to minimise token useage, so that we can 
 
 ### Environment Setup
 
-```bash
-# Sync dependencies
-uv sync
+Task tree (tt) is installed and can be used where possible
 
-# Install with dev dependencies
-uv sync --extra dev
+```bash
+# Sync dependencies/install dev dependencies
+tt dev-setup
 ```
 
 ### Running the Application
@@ -127,12 +129,12 @@ dev = [
 Then sync:
 
 ```bash
-uv sync
+tt dev-setup
 ```
 
 ## Project Goals
 
-Add your project goals and objectives here as they evolve.
+Make Claude Code more efficient at translating ideas into great code by providing maximum useful code knowledge for minimal input tokens
 
 ## Notes
 
