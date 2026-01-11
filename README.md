@@ -175,11 +175,74 @@ $ ack info validateSession
 - Break-even: After 2 complex queries
 - Ongoing cost: Near-zero (summaries rarely invalidate)
 
+## MCP Integration
+
+Athena includes Model Context Protocol (MCP) integration, exposing code navigation capabilities as first-class tools in Claude Code.
+
+### Benefits
+
+- **Native tool discovery** — Tools appear in Claude Code's capabilities list
+- **Structured I/O** — Type-safe parameters and responses
+- **2-3x higher usage** — Compared to CLI-only approach due to better discoverability
+
+### Available Tools
+
+Currently supported:
+
+- **`ack_locate`** — Find Python entity location (file path + line range)
+
+### Installation
+
+Automatic configuration (recommended):
+
+```bash
+ack install-mcp
+```
+
+This automatically configures Claude Code by adding the MCP server entry to your config file.
+
+Manual configuration:
+
+Add to your Claude Code config file:
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Linux:** `~/.config/Claude/claude_desktop_config.json`
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "ack": {
+      "command": "ack",
+      "args": ["mcp-server"]
+    }
+  }
+}
+```
+
+Restart Claude Code for changes to take effect.
+
+### Troubleshooting
+
+**Tools not appearing:**
+- Verify `ack` is installed and in your PATH: `which ack`
+- Check Claude Code logs for MCP server errors
+- Ensure config file syntax is valid JSON
+
+**Server not starting:**
+- Run `ack mcp-server` manually to check for errors
+- Verify MCP dependency is installed: `pip show mcp`
+
+**Uninstalling:**
+
+```bash
+ack uninstall-mcp
+```
+
 ## Future Extensions
 
-Beyond initial implementation:
+Beyond current implementation:
 
-- **MCP (Model Context Protocol) integration** — First-class tool support in Claude Code
 - **Reverse semantic search** — "Where is feature X implemented?" using embedding-based search
 - **Hierarchical summary trees** — Navigate codebases through semantic relationships
 - **Call graph analysis** — "What calls this function?"
@@ -190,6 +253,7 @@ Beyond initial implementation:
 - **Language:** Python 3.10+
 - **AST parsing:** tree-sitter with language-specific bindings
 - **CLI framework:** Typer
+- **MCP integration:** Official MCP Python SDK
 - **Caching layer:** TBD (considering SQLite, LMDB)
 - **LLM client:** Anthropic API (Claude) — Stage 3 only
 - **Distribution:** pipx-installable package
