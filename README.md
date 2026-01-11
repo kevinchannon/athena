@@ -10,6 +10,11 @@ Claude Code currently incurs significant token costs during repository navigatio
 
 Most discovery queries ("What does this file contain?", "Where is function X?") don't require reading entire source files. By building a queryable semantic index, we can answer these questions using structured metadata instead, potentially reducing planning token costs by 15-30x.
 
+## What's the deal with the name?
+Athena was an Ancient Greek goddess associated with strategic wisdom, logic, crafts, architecture and discipline. She is a patron of engineers and planners, not dreamers. Seemed appropriate.
+
+one of her symbolic animals was the owl.
+
 ## Key Design Principles
 
 1. **Cache only what's expensive** — LLM summaries go in persistent storage; signatures and docstrings are extracted on-demand from AST parsing
