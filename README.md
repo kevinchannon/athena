@@ -8,15 +8,14 @@ A semantic code analysis tool designed to help Claude Code navigate repositories
 
 Claude Code currently incurs significant token costs during repository navigation. A typical planning phase involves reading 10-20 files to understand codebase architecture, consuming substantially more tokens than the targeted modifications themselves. This linear scaling with codebase size makes work on large repositories inefficient.
 
-The core insight: most discovery queries ("What does this file contain?", "Where is function X?") don't require reading entire source files. By building a queryable semantic index, we can answer these questions using structured metadata instead, potentially reducing planning token costs by 15-30x.
+Most discovery queries ("What does this file contain?", "Where is function X?") don't require reading entire source files. By building a queryable semantic index, we can answer these questions using structured metadata instead, potentially reducing planning token costs by 15-30x.
 
 ## Key Design Principles
 
 1. **Cache only what's expensive** — LLM summaries go in persistent storage; signatures and docstrings are extracted on-demand from AST parsing
 2. **Always-accurate positions** — Line ranges are computed from AST on every query, never stored, ensuring data never becomes stale
-3. **Incremental value delivery** — Each implementation stage produces a useful tool
-4. **Unified output format** — All queries return `{sig, docs, summary}` structure where available
-5. **AST-based change detection** — Formatting and comment changes don't invalidate summaries
+3. **Unified output format** — All queries return `{sig, docs, summary}` structure where available
+4. **AST-based change detection** — Formatting and comment changes don't invalidate summaries
 
 ## Architecture Overview
 
