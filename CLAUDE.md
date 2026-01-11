@@ -53,6 +53,11 @@ tt test        # Run tests
 uv run -m athena  # Run app
 ```
 
+Find available commands:
+```bash
+tt --list
+```
+
 ## Adding Dependencies
 
 Edit `pyproject.toml` → `tt dev-setup`
