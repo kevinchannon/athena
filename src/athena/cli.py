@@ -1,3 +1,4 @@
+import asyncio
 import json
 from dataclasses import asdict
 
@@ -35,3 +36,15 @@ def locate(entity_name: str):
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=2)
+
+
+@app.command()
+def mcp_server():
+    """Start the MCP server for Claude Code integration.
+
+    This command starts the Model Context Protocol server that exposes
+    Athena's code navigation tools to Claude Code via structured JSON-RPC.
+    """
+    from athena.mcp_server import main
+
+    asyncio.run(main())
