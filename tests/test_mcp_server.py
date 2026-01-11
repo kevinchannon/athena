@@ -2,13 +2,14 @@
 
 import pytest
 
-from athena.mcp_server import app
+from athena import mcp_server
 
 
 @pytest.mark.asyncio
 async def test_list_tools():
     """Test that list_tools returns the ack_locate tool."""
-    tools = await app.list_tools()
+    # Call the handler function directly
+    tools = await mcp_server.list_tools()
 
     assert len(tools) == 1
     tool = tools[0]
@@ -22,4 +23,5 @@ async def test_list_tools():
 async def test_call_tool_unknown():
     """Test that calling an unknown tool raises ValueError."""
     with pytest.raises(ValueError, match="Unknown tool"):
-        await app.call_tool("nonexistent_tool", {})
+        # Call the handler function directly
+        await mcp_server.call_tool("nonexistent_tool", {})

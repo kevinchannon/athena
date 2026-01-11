@@ -22,9 +22,9 @@ def main(ctx: typer.Context, entity_name: str = typer.Argument(None, help="Entit
     """
     if ctx.invoked_subcommand is None:
         if entity_name is None:
-            # No entity name and no subcommand - show help
+            # No entity name and no subcommand - show help and exit with error
             typer.echo(ctx.get_help())
-            raise typer.Exit()
+            raise typer.Exit(code=2)
         else:
             # Entity name provided without subcommand - run locate
             ctx.invoke(locate, entity_name=entity_name)
