@@ -30,4 +30,6 @@ jobs:
       run: uv sync --extra dev
 
     - name: Run tests with coverage
-      run: tt coverage
+      run: |
+        export PATH="$HOME/.local/bin:$PATH"
+        tt coverage

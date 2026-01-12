@@ -39,7 +39,9 @@ jobs:
           cat pyproject.toml | grep version
 
       - name: Build package
-        run: tt build
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          tt build
 
       - name: Verify wheel contents
         run: |
