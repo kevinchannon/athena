@@ -9,14 +9,20 @@ tasks:
     desc: Run the test suite
     deps: []
     inputs: [src/**/*.py, tests/**/*.py]
-    cmd: PYTHONPATH=src python3 -m pytest tests/ -v
+    cmd: uv run pytest
+
+  coverage:
+    desc: Run the test suite with code coverage
+    deps: [ ]
+    inputs: [ src/**/*.py, tests/**/*.py ]
+    cmd: uv run pytest --cov=athena --cov-report=term-missing
 
   build:
     desc: Build distribution packages (wheel and sdist)
     deps: [test]
     inputs: [src/**/*.py, pyproject.toml, README.md]
     outputs: [dist/*.whl, dist/*.tar.gz]
-    cmd: python3 -m build
+    cmd: uv build
 
   install-dev:
     desc: Install package in editable mode for development
