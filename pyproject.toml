@@ -3,9 +3,10 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "athena"
+name = "athena-code"
 version = "0.0.1"
-description = "Add your description here"
+description = "A semantic code analysis tool designed to help Claude Code navigate repositories efficiently while dramatically reducing token consumption."
+readme = "src/athena/README.md"
 requires-python = ">=3.12"
 dependencies = [
     "typer>=0.12.0",

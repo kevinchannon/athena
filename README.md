@@ -183,7 +183,6 @@ Athena includes Model Context Protocol (MCP) integration, exposing code navigati
 
 - **Native tool discovery** — Tools appear in Claude Code's capabilities list
 - **Structured I/O** — Type-safe parameters and responses
-- **2-3x higher usage** — Compared to CLI-only approach due to better discoverability
 
 ### Available Tools
 
@@ -261,7 +260,7 @@ Beyond current implementation:
 ## Installation
 
 ```bash
-pipx install athenacode
+pipx install athena-code
 ```
 
 ## Usage Workflow
