@@ -13,7 +13,7 @@ Most discovery queries ("What does this file contain?", "Where is function X?") 
 ## What's the deal with the name?
 Athena was an Ancient Greek goddess associated with strategic wisdom, logic, crafts, architecture and discipline. She is a patron of engineers and planners, not dreamers. Seemed appropriate.
 
-one of her symbolic animals was the owl.
+One of her symbolic animals was the owl.
 
 ## Key Design Principles
 
