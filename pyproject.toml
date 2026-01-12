@@ -17,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 ack = "athena.cli:app"
+athena = "athena.cli:app"
 
 [project.optional-dependencies]
 dev = [
