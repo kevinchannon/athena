@@ -29,6 +29,11 @@ jobs:
     - name: Sync dependencies
       run: uv sync --extra dev
 
+    - name: Install tasktree via pipx with Python ${{ matrix.python-version }}
+      run: |
+        pipx install --python python${{ matrix.python-version }} tasktree
+      shell: bash
+
     - name: Run tests with coverage
       run: |
         export PATH="$HOME/.local/bin:$PATH"
