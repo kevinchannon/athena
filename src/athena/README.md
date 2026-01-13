@@ -42,7 +42,7 @@ Athena includes Model Context Protocol (MCP) integration, exposing code navigati
 ### Installation
 
 ```bash
-ack install-mcp
+athena install-mcp
 ```
 
 This automatically configures Claude Code by adding the MCP server entry to your config file. You will need to restart Claude Code for changes to take effect.
@@ -51,7 +51,7 @@ This automatically configures Claude Code by adding the MCP server entry to your
 
 If you don't like using your Anthropic tokens more efficiently to generate better code, for some reason, then:
 ```bash
-ack uninstall-mcp
+athena uninstall-mcp
 ```
 to remove the MCP integration
 
@@ -59,7 +59,7 @@ to remove the MCP integration
 
 ```bash
 cd /path/to/repository
-ack locate validateSession  # Find the locations of entities in the codebase
+athena locate validateSession  # Find the locations of entities in the codebase
 ```
 
 ## Contributing
