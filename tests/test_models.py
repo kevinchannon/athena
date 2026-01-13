@@ -7,6 +7,7 @@ from athena.models import (
     Location,
     MethodInfo,
     ModuleInfo,
+    PackageInfo,
     Parameter,
     Signature,
 )
@@ -262,3 +263,42 @@ def test_module_info_to_dict():
         "extent": {"start": 0, "end": 50},
         "summary": "Module docstring."
     }
+
+
+def test_package_info_creation():
+    info = PackageInfo(
+        path="src/mypackage",
+        summary="Test package."
+    )
+
+    assert info.path == "src/mypackage"
+    assert info.summary == "Test package."
+
+
+def test_package_info_without_summary():
+    info = PackageInfo(path="src/mypackage")
+
+    assert info.summary is None
+
+
+def test_package_info_to_dict():
+    info = PackageInfo(
+        path="src/mypackage",
+        summary="Package docstring."
+    )
+
+    info_dict = asdict(info)
+
+    assert info_dict == {
+        "path": "src/mypackage",
+        "summary": "Package docstring."
+    }
+
+
+def test_package_info_no_extent():
+    """Test that PackageInfo does not have extent field."""
+    info = PackageInfo(path="src/mypackage", summary="Test.")
+
+    # PackageInfo should not have extent attribute
+    assert not hasattr(info, 'extent')
+    assert not hasattr(info, 'sig')

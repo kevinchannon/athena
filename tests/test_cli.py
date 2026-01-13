@@ -208,3 +208,64 @@ def test_info_command_without_docstring(tmp_path, monkeypatch):
     assert "summary" not in func
 
 
+def test_info_command_package(tmp_path, monkeypatch):
+    """Test info command with a package (directory with __init__.py)."""
+    # Create package directory
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    init_file = package_dir / "__init__.py"
+    init_file.write_text('"""This is my test package."""')
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["info", "mypackage"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert "package" in data
+    pkg = data["package"]
+    assert pkg["path"] == "mypackage"
+    assert pkg["summary"] == "This is my test package."
+    # Package should not have extent or sig fields
+    assert "extent" not in pkg
+    assert "sig" not in pkg
+
+
+def test_info_command_package_no_docstring(tmp_path, monkeypatch):
+    """Test info command with a package that has no docstring."""
+    # Create package directory
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    init_file = package_dir / "__init__.py"
+    init_file.write_text('# Just a comment')
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["info", "mypackage"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert "package" in data
+    pkg = data["package"]
+    assert pkg["path"] == "mypackage"
+    # summary should be omitted when None
+    assert "summary" not in pkg
+
+
+def test_info_command_package_missing_init(tmp_path, monkeypatch):
+    """Test info command with directory missing __init__.py."""
+    # Create directory without __init__.py
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["info", "mypackage"])
+
+    assert result.exit_code == 1
+    assert "missing __init__.py" in result.output.lower()
+
+

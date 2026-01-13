@@ -1,4 +1,4 @@
-# Parser module for extracting entities from source code
+"""Parser module for extracting entities from source code"""
 from pathlib import Path
 
 from athena.parsers.base import BaseParser

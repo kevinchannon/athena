@@ -119,3 +119,74 @@ def test_relative_path(tmp_path):
     assert info is not None
     assert info.path == "src/test.py"
     assert info.summary == "A function."
+
+
+def test_get_package_info(tmp_path):
+    """Test getting package info from a directory with __init__.py."""
+    (tmp_path / ".git").mkdir()
+
+    # Create a package directory with __init__.py
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    init_file = package_dir / "__init__.py"
+    init_file.write_text('''"""This is a test package."""
+
+def some_function():
+    pass
+''')
+
+    # Get package info
+    info = get_entity_info(str(package_dir), None, root=tmp_path)
+
+    assert info is not None
+    assert info.path == "mypackage"
+    assert info.summary == "This is a test package."
+    # PackageInfo should not have extent or sig fields
+    assert not hasattr(info, 'extent')
+    assert not hasattr(info, 'sig')
+
+
+def test_get_package_info_no_docstring(tmp_path):
+    """Test getting package info when __init__.py has no docstring."""
+    (tmp_path / ".git").mkdir()
+
+    # Create a package directory with __init__.py without docstring
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    init_file = package_dir / "__init__.py"
+    init_file.write_text('''def some_function():
+    pass
+''')
+
+    # Get package info
+    info = get_entity_info(str(package_dir), None, root=tmp_path)
+
+    assert info is not None
+    assert info.path == "mypackage"
+    assert info.summary is None
+
+
+def test_package_missing_init(tmp_path):
+    """Test that ValueError is raised when directory has no __init__.py."""
+    (tmp_path / ".git").mkdir()
+
+    # Create a directory without __init__.py
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+
+    with pytest.raises(ValueError, match="missing __init__.py"):
+        get_entity_info(str(package_dir), None, root=tmp_path)
+
+
+def test_package_with_entity_name_error(tmp_path):
+    """Test that ValueError is raised when specifying entity name for a package."""
+    (tmp_path / ".git").mkdir()
+
+    # Create a package directory with __init__.py
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    init_file = package_dir / "__init__.py"
+    init_file.write_text('"""Test package."""')
+
+    with pytest.raises(ValueError, match="Cannot specify entity name for package"):
+        get_entity_info(str(package_dir), "some_entity", root=tmp_path)

@@ -10,7 +10,7 @@ import typer
 from athena import __version__
 from athena.info import get_entity_info
 from athena.locate import locate_entity
-from athena.models import ClassInfo, FunctionInfo, MethodInfo, ModuleInfo
+from athena.models import ClassInfo, FunctionInfo, MethodInfo, ModuleInfo, PackageInfo
 from athena.repository import RepositoryNotFoundError
 
 app = typer.Typer(
@@ -50,15 +50,17 @@ def locate(entity_name: str):
 
 @app.command()
 def info(location: str):
-    """Get detailed information about a code entity.
+    """Get detailed information about a code entity or package.
 
     Args:
-        location: Path to entity in format "file_path:entity_name"
-                 or just "file_path" for module-level info
+        location: Path to entity in format "file_path:entity_name",
+                 "file_path" for module-level info,
+                 or "directory_path" for package info
 
     Examples:
         ack info src/auth/session.py:validateSession
         ack info src/auth/session.py
+        ack info src/athena
     """
     # Parse location string
     if ":" in location:
@@ -94,6 +96,8 @@ def info(location: str):
         output = {"method": asdict(entity_info)}
     elif isinstance(entity_info, ModuleInfo):
         output = {"module": asdict(entity_info)}
+    elif isinstance(entity_info, PackageInfo):
+        output = {"package": asdict(entity_info)}
     else:
         typer.echo(f"Error: Unknown entity type: {type(entity_info)}", err=True)
         raise typer.Exit(code=2)

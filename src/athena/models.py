@@ -69,5 +69,12 @@ class ModuleInfo:
     summary: str | None = None
 
 
+@dataclass
+class PackageInfo:
+    """Information about a package (directory with __init__.py)."""
+    path: str
+    summary: str | None = None
+
+
 # Union type for entity info
-EntityInfo = FunctionInfo | ClassInfo | MethodInfo | ModuleInfo
+EntityInfo = FunctionInfo | ClassInfo | MethodInfo | ModuleInfo | PackageInfo

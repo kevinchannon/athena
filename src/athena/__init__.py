@@ -1,4 +1,4 @@
-"""Athena - A Python project."""
+"""Athena - A semantic code analysis tool designed to help Claude Code navigate repositories efficiently while dramatically reducing token consumption."""
 
 try:
     from importlib.metadata import version
