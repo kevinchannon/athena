@@ -37,13 +37,13 @@ def test_app_has_uninstall_mcp_command():
 
 def test_locate_command_requires_entity_name():
     # Should fail without entity name argument
-    result = runner.invoke(app, [])
+    result = runner.invoke(app, ["locate"])
 
     assert result.exit_code != 0
 
 
 def test_locate_command_shows_help():
-    result = runner.invoke(app, ["--help"])
+    result = runner.invoke(app, ["locate", "--help"])
 
     assert result.exit_code == 0
     assert "entity_name" in result.stdout.lower()
@@ -59,7 +59,7 @@ def test_locate_command_outputs_valid_json(tmp_path, monkeypatch):
     # Change to temp directory
     monkeypatch.chdir(tmp_path)
 
-    result = runner.invoke(app, ["target"])
+    result = runner.invoke(app, ["locate", "target"])
 
     assert result.exit_code == 0
     # Verify it's valid JSON
@@ -75,7 +75,7 @@ def test_locate_command_returns_empty_array_when_not_found(tmp_path, monkeypatch
 
     monkeypatch.chdir(tmp_path)
 
-    result = runner.invoke(app, ["nonexistent"])
+    result = runner.invoke(app, ["locate", "nonexistent"])
 
     assert result.exit_code == 0
     data = json.loads(result.stdout)

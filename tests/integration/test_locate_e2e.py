@@ -6,7 +6,7 @@ def test_locate_command_on_actual_repository():
     """Test the locate command on the actual athena repository."""
     # Locate a known function in our codebase
     result = subprocess.run(
-        ["uv", "run", "-m", "athena", "find_repository_root"],
+        ["uv", "run", "-m", "athena", "locate", "find_repository_root"],
         capture_output=True,
         text=True
     )
@@ -23,7 +23,7 @@ def test_locate_command_on_actual_repository():
 def test_locate_class_in_repository():
     """Test locating a class in the actual repository."""
     result = subprocess.run(
-        ["uv", "run", "-m", "athena", "PythonParser"],
+        ["uv", "run", "-m", "athena", "locate", "PythonParser"],
         capture_output=True,
         text=True
     )
@@ -41,7 +41,7 @@ def test_locate_class_in_repository():
 def test_locate_nonexistent_entity():
     """Test that searching for nonexistent entity returns empty array."""
     result = subprocess.run(
-        ["uv", "run", "-m", "athena", "ThisDoesNotExistAnywhere"],
+        ["uv", "run", "-m", "athena", "locate", "ThisDoesNotExistAnywhere"],
         capture_output=True,
         text=True
     )
@@ -54,7 +54,7 @@ def test_locate_nonexistent_entity():
 def test_json_output_can_be_piped():
     """Test that JSON output is valid and can be processed."""
     result = subprocess.run(
-        ["uv", "run", "-m", "athena", "locate_entity"],
+        ["uv", "run", "-m", "athena", "locate", "locate_entity"],
         capture_output=True,
         text=True
     )

@@ -10,25 +10,8 @@ from athena.repository import RepositoryNotFoundError
 
 app = typer.Typer(
     help="Athena Code Knowledge - semantic code analysis tool",
-    no_args_is_help=False,
+    no_args_is_help=True,
 )
-
-
-@app.callback(invoke_without_command=True)
-def main(ctx: typer.Context, entity_name: str = typer.Argument(None, help="Entity name to locate")):
-    """Athena Code Knowledge - semantic code analysis tool.
-
-    When called without a subcommand, assumes 'locate' command for backward compatibility.
-    """
-    if ctx.invoked_subcommand is None:
-        if entity_name is None:
-            # No entity name and no subcommand - show help and exit with error
-            typer.echo(ctx.get_help())
-            raise typer.Exit(code=2)
-        else:
-            # Entity name provided without subcommand - run locate
-            ctx.invoke(locate, entity_name=entity_name)
-
 
 @app.command()
 def locate(entity_name: str):
