@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "athena-code"
-version = "0.0.1"
+version = "0.0.0.dev0+local"
 description = "A semantic code analysis tool designed to help Claude Code navigate repositories efficiently while dramatically reducing token consumption."
 readme = "src/athena/README.md"
 requires-python = ">=3.12"
