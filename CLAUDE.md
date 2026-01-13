@@ -11,12 +11,17 @@ Python 3.12+ project using uv for dependency management, src-layout (PEP 420), p
 ```
 athena/
 ├── src/athena/       # Source (version in __init__.py)
-├── tests/            # pytest tests
+├── tests/            # pytest testss
 ├── pyproject.toml    # Config/deps
 └── CLAUDE.md         # This file
 ```
 
 ## Critical Development Principles
+
+### 0. No backwards compatibility
+- Athena is still in early development, **DO NOT** worry about backwards compatibility.
+- Athena has no known users in the field, so we do not care what we break in past versions.
+- **Clean current code** is MUCH more important that considering breaking changes.
 
 ### 1. Small Incremental Commits
 
