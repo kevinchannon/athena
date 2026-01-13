@@ -1,6 +1,6 @@
 Work in Progress!
 
-# Athena Code Knowledge (`ack`)
+# Athena Code Knowledge
 
 A semantic code analysis tool designed to help Claude Code navigate repositories efficiently while dramatically reducing token consumption.
 
@@ -17,22 +17,25 @@ One of her symbolic animals was the owl.
 
 ## Key Design Principles
 
-1. **Cache only what's expensive** — LLM summaries go in persistent storage; signatures and docstrings are extracted on-demand from AST parsing
-2. **Always-accurate positions** — Line ranges are computed from AST on every query, never stored, ensuring data never becomes stale
-3. **Unified output format** — All queries return `{sig, docs, summary}` structure where available
+1. **Rich docstrings** - Use LLMs to generate rich, accurate docstrings that can be reported back quickly by AST-based search
+2. **Docstring hashes detect staleness** - The docstring contains hashes covering the code and the summary; if either changes the relevant hash is regenerated
+2. **Always-accurate positions** — Line ranges are computed from AST on every query, ensuring data never becomes stale
+3. **Unified output format** — All info queries return `{sig, summary}` structure where available
 4. **AST-based change detection** — Formatting and comment changes don't invalidate summaries
 
 ## Architecture Overview
 
-The tool comprises three layers:
+The tool comprises two layers:
 
 - **CLI interface** — Simple, composable commands outputting JSON
 - **Tree-sitter AST parser** — On-demand extraction of signatures, docstrings, and line ranges
-- **Persistent cache** — Stores only expensive LLM-generated summaries and AST hashes
 
 ### Supported Languages
 
+Current:
 - Python
+
+Planned
 - JavaScript
 - TypeScript
 
@@ -47,79 +50,48 @@ All entity queries return a consistent three-tier information structure:
   "path": "src/auth/session.ts",
   "extent": { "start": 88, "end": 105 },
   "sig": "validateSession(token: string): Promise<User>",
-  "docs": "Validates JWT token and returns user object.",
-  "summary": "Verifies JWT signature and expiry, queries database for session status, returns User object or raises AuthError."
+  "docs": "Verifies JWT signature and expiry, queries database for session status, returns User object or raises AuthError."
 }
 ```
 
 Information hierarchy for Claude Code:
-1. **`summary`** (if present) — LLM-generated semantic description
-2. **`docs`** (fallback) — Author-written docstring
-3. **`sig`** (fallback) — Structural signature from AST
+1. **`summary`** (if present) — Author- or LLM-written docstring
+2. **`sig`** (fallback) — Structural signature from AST
 
 ## Implementation Roadmap
 
-### Stage 1: AST-Only Queries
+### Stage 1: AST Queries
 
-**Goal:** Deliver immediate utility with zero LLM cost and no persistent storage.
+**Goal:** Deliver immediate utility with zero LLM cost.
 
 **Features:**
-- `ack locate <entity>` — Find entity and return file path + line range
-- `ack info <entity>` — Return `{sig, docs, summary}` with `summary: null`
-- `ack file-info <path>` — File-level overview with entity list
+- `athena locate <entity>` — Find entity and return file path + line range
+- `athena  info <entity>` — Return `{sig, summary}`
+- `athena file-info <path>` — File-level overview with entity list
 
 **Example:**
 ```bash
-$ ack locate validateSession
+$ athena locate validateSession
 {"path": "src/auth/session.ts", "extent": { "start": 88, "end": 105 }}
 
-$ ack info validateSession
+$ athena info validateSession
 {
   "path": "src/auth/session.ts",
   "extent": { "start": 88, "end": 105 },
   "sig": "validateSession(token: string): Promise<User>",
-  "docs": "Validates JWT token and returns user object.",
-  "summary": null
+  "summary": "Validates JWT token and returns user object."
 }
 ```
 
 **Deliverable:** Working CLI tool, ~500 lines of code, immediate value for small repositories.
 
-### Stage 2: Persistent Caching
-
-**Goal:** Scale to large repositories through entity indexing.
-
-**Features:**
-- `ack init` — Scan repository, build entity index
-- `ack update` — Detect changed files, refresh index
-- AST hash-based change detection
-- Fast entity lookups without re-parsing
-
-**Example:**
-```bash
-$ ack init
-Scanning repository...
-Found 234 files, 1,842 entities
-Index created: .ack/index.db
-
-$ ack update
-Detected 3 changed files
-Updated 12 entity hashes
-```
-
-**Deliverable:** Tool that queries 10k-file repositories in <50ms.
-
-**Technical details:** 
-- Store only entity metadata (name, file path, AST hash) and LLM summaries
-- Signatures, docstrings, and line ranges extracted on-demand (never cached)
-- Change detection based on AST structure, not text formatting
-
-### Stage 3: LLM Semantic Summaries
+### Stage 2: LLM Semantic Summaries
 
 **Goal:** Add rich semantic descriptions for comprehensive code understanding.
 
 **Features:**
-- `ack summarise` — Generate LLM summaries for all entities
+- `athena init` - Update existing doc comments with athena hashes
+- `ack summarise` — Generate LLM summaries for all entities (modules, files, function, classes, etc)
 - `ack summarise <entity>` — Generate summary for specific entity
 - Batch processing for LLM efficiency
 - Summary invalidation on semantic (not formatting) changes
@@ -136,7 +108,6 @@ $ ack info validateSession
   "path": "src/auth/session.ts",
   "extent": { "start": 88, "end": 105 },
   "sig": "validateSession(token: string): Promise<User>",
-  "docs": "Validates JWT token and returns user object.",
   "summary": "Verifies JWT signature and expiry, queries database for active session status, returns User object or raises AuthError."
 }
 ```
@@ -147,7 +118,7 @@ $ ack info validateSession
 - Formatting changes (whitespace, comments) → no re-summarisation
 - Docstring updates → no re-summarisation (docstrings separate from summaries)
 - Signature or control flow changes → summary marked invalid
-- User runs `ack update` to detect, `ack summarise` to regenerate
+- User runs `athena update` to detect, `athena summarise` to regenerate
 
 ## Token Efficiency Analysis
 
@@ -159,7 +130,7 @@ $ ack info validateSession
 
 **Total:** ~24,000 tokens
 
-**With `ack` (Stage 3):**
+**With `athena` (Stage 2):**
 1. "What files handle authentication?" → `ack file-info` with summaries (300 tokens)
 2. "What's in session.ts?" → already have summary
 3. "Where's validateSession?" → `ack info` includes rich summary (100 tokens)
