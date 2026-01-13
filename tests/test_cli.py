@@ -1,4 +1,5 @@
 import json
+import re
 
 from typer.testing import CliRunner
 
@@ -80,5 +81,19 @@ def test_locate_command_returns_empty_array_when_not_found(tmp_path, monkeypatch
     assert result.exit_code == 0
     data = json.loads(result.stdout)
     assert data == []
+
+
+def test_version_flag_short():
+    result = runner.invoke(app, ["-v"])
+
+    assert result.exit_code == 0
+    assert re.match(r"athena version \d+\.\d+\.\d+(-[a-z0-9]+)?\n", result.stdout)
+
+
+def test_version_flag_long():
+    result = runner.invoke(app, ["--version"])
+
+    assert result.exit_code == 0
+    assert re.match(r"athena version \d+\.\d+\.\d+(-[a-z0-9]+)?\n", result.stdout)
 
 

@@ -1,10 +1,13 @@
 import asyncio
 import json
-import sys
+
 from dataclasses import asdict
+from rich.console import Console
+from typing import Optional
 
 import typer
 
+from athena import __version__
 from athena.locate import locate_entity
 from athena.repository import RepositoryNotFoundError
 
@@ -12,6 +15,8 @@ app = typer.Typer(
     help="Athena Code Knowledge - semantic code analysis tool",
     no_args_is_help=True,
 )
+
+console = Console()
 
 @app.command()
 def locate(entity_name: str):
@@ -89,3 +94,24 @@ def uninstall_mcp():
     else:
         typer.echo(f"✗ {message}", err=True)
         raise typer.Exit(code=1)
+
+
+def _version_callback(value: bool):
+    """Show version and exit."""
+    if value:
+        console.print(f"athena version {__version__}")
+        raise typer.Exit()
+
+
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        "-v",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit",
+    )):
+    pass
