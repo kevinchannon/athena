@@ -221,3 +221,450 @@ def another_function():
     assert len(functions) == 2
     assert len(classes) == 1
     assert len(methods) == 2
+
+
+def test_extract_docstring_from_function():
+    source = '''def hello():
+    """This is a docstring."""
+    print("world")
+'''
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    # Get the function node
+    func_node = tree.root_node.children[0]
+
+    docstring = parser._extract_docstring(func_node, source)
+
+    assert docstring == "This is a docstring."
+
+
+def test_extract_docstring_from_function_without_docstring():
+    source = """def hello():
+    print("world")
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    docstring = parser._extract_docstring(func_node, source)
+
+    assert docstring is None
+
+
+def test_extract_multiline_docstring():
+    source = '''def hello():
+    """This is a multiline docstring.
+
+    It has multiple lines.
+    And even more lines.
+    """
+    print("world")
+'''
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    docstring = parser._extract_docstring(func_node, source)
+
+    expected = """This is a multiline docstring.
+
+    It has multiple lines.
+    And even more lines.
+    """
+    assert docstring == expected
+
+
+def test_extract_docstring_from_class():
+    source = '''class MyClass:
+    """This is a class docstring."""
+    pass
+'''
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    class_node = tree.root_node.children[0]
+
+    docstring = parser._extract_docstring(class_node, source)
+
+    assert docstring == "This is a class docstring."
+
+
+def test_extract_docstring_from_class_without_docstring():
+    source = """class MyClass:
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    class_node = tree.root_node.children[0]
+
+    docstring = parser._extract_docstring(class_node, source)
+
+    assert docstring is None
+
+
+def test_extract_module_level_docstring():
+    source = '''"""This is a module-level docstring."""
+
+def some_function():
+    pass
+'''
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+
+    docstring = parser._extract_docstring(tree.root_node, source)
+
+    assert docstring == "This is a module-level docstring."
+
+
+def test_extract_module_level_docstring_not_present():
+    source = """def some_function():
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+
+    docstring = parser._extract_docstring(tree.root_node, source)
+
+    assert docstring is None
+
+
+def test_extract_docstring_with_single_quotes():
+    source = """def hello():
+    'This is a docstring with single quotes.'
+    print("world")
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    docstring = parser._extract_docstring(func_node, source)
+
+    assert docstring == "This is a docstring with single quotes."
+
+
+def test_extract_parameters_no_params():
+    source = """def hello():
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    params = parser._extract_parameters(func_node, source)
+
+    assert params == []
+
+
+def test_extract_parameters_simple():
+    source = """def foo(x, y, z):
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    params = parser._extract_parameters(func_node, source)
+
+    assert len(params) == 3
+    assert params[0].name == "x"
+    assert params[0].type is None
+    assert params[0].default is None
+    assert params[1].name == "y"
+    assert params[2].name == "z"
+
+
+def test_extract_parameters_with_types():
+    source = """def foo(x: int, y: str, z: bool):
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    params = parser._extract_parameters(func_node, source)
+
+    assert len(params) == 3
+    assert params[0].name == "x"
+    assert params[0].type == "int"
+    assert params[0].default is None
+    assert params[1].name == "y"
+    assert params[1].type == "str"
+    assert params[2].name == "z"
+    assert params[2].type == "bool"
+
+
+def test_extract_parameters_with_defaults():
+    source = """def foo(x=5, y="hello", z=None):
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    params = parser._extract_parameters(func_node, source)
+
+    assert len(params) == 3
+    assert params[0].name == "x"
+    assert params[0].type is None
+    assert params[0].default == "5"
+    assert params[1].name == "y"
+    assert params[1].default == '"hello"'
+    assert params[2].name == "z"
+    assert params[2].default == "None"
+
+
+def test_extract_parameters_with_types_and_defaults():
+    source = """def foo(a, b: int, c=5, d: str = "hello"):
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    params = parser._extract_parameters(func_node, source)
+
+    assert len(params) == 4
+    assert params[0].name == "a"
+    assert params[0].type is None
+    assert params[0].default is None
+    assert params[1].name == "b"
+    assert params[1].type == "int"
+    assert params[1].default is None
+    assert params[2].name == "c"
+    assert params[2].type is None
+    assert params[2].default == "5"
+    assert params[3].name == "d"
+    assert params[3].type == "str"
+    assert params[3].default == '"hello"'
+
+
+def test_extract_parameters_complex_types():
+    source = """def foo(x: list[int], y: dict[str, Any], z: Optional[int] = None):
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    params = parser._extract_parameters(func_node, source)
+
+    assert len(params) == 3
+    assert params[0].name == "x"
+    assert params[0].type == "list[int]"
+    assert params[1].name == "y"
+    assert params[1].type == "dict[str, Any]"
+    assert params[2].name == "z"
+    assert params[2].type == "Optional[int]"
+    assert params[2].default == "None"
+
+
+def test_extract_parameters_with_self():
+    source = """def method(self, x: int):
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    params = parser._extract_parameters(func_node, source)
+
+    # We include self for now - it's up to the caller to filter it
+    assert len(params) == 2
+    assert params[0].name == "self"
+    assert params[1].name == "x"
+
+
+def test_extract_parameters_with_args_kwargs():
+    source = """def foo(x, *args, **kwargs):
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    params = parser._extract_parameters(func_node, source)
+
+    assert len(params) == 3
+    assert params[0].name == "x"
+    assert params[1].name == "*args"
+    assert params[2].name == "**kwargs"
+
+
+def test_extract_return_type():
+    source = """def foo() -> bool:
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    return_type = parser._extract_return_type(func_node, source)
+
+    assert return_type == "bool"
+
+
+def test_extract_return_type_not_present():
+    source = """def foo():
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    return_type = parser._extract_return_type(func_node, source)
+
+    assert return_type is None
+
+
+def test_extract_complex_return_type():
+    source = """def foo() -> Optional[dict[str, Any]]:
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    return_type = parser._extract_return_type(func_node, source)
+
+    assert return_type == "Optional[dict[str, Any]]"
+
+
+def test_extract_return_type_with_params():
+    source = """def foo(x: int, y: str = "hello") -> list[int]:
+    pass
+"""
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source, "utf8"))
+    func_node = tree.root_node.children[0]
+
+    return_type = parser._extract_return_type(func_node, source)
+
+    assert return_type == "list[int]"
+
+
+def test_extract_entity_info_function_with_full_signature():
+    source = '''def validateSession(token: str = "abc123") -> bool:
+    """Validates JWT token and returns user object."""
+    return True
+'''
+    parser = PythonParser()
+
+    info = parser.extract_entity_info(source, "test.py", "validateSession")
+
+    assert info is not None
+    assert info.path == "test.py"
+    assert info.extent.start == 0
+    assert info.extent.end == 2
+    assert info.sig is not None
+    assert info.sig.name == "validateSession"
+    assert len(info.sig.args) == 1
+    assert info.sig.args[0].name == "token"
+    assert info.sig.args[0].type == "str"
+    assert info.sig.args[0].default == '"abc123"'
+    assert info.sig.return_type == "bool"
+    assert info.summary == "Validates JWT token and returns user object."
+
+
+def test_extract_entity_info_function_without_docstring():
+    source = """def hello():
+    pass
+"""
+    parser = PythonParser()
+
+    info = parser.extract_entity_info(source, "test.py", "hello")
+
+    assert info is not None
+    assert info.sig is not None
+    assert info.sig.name == "hello"
+    assert info.sig.args == []
+    assert info.summary is None
+
+
+def test_extract_entity_info_method():
+    source = '''class MyClass:
+    def method(self, x: int) -> str:
+        """A method."""
+        return str(x)
+'''
+    parser = PythonParser()
+
+    info = parser.extract_entity_info(source, "test.py", "method")
+
+    assert info is not None
+    assert info.sig is not None
+    assert info.sig.name == "method"
+    assert len(info.sig.args) == 2
+    assert info.sig.args[0].name == "self"
+    assert info.sig.args[1].name == "x"
+    assert info.sig.args[1].type == "int"
+    assert info.sig.return_type == "str"
+    assert info.summary == "A method."
+
+
+def test_extract_entity_info_class():
+    source = '''class MyClass:
+    """This is a class docstring."""
+    pass
+'''
+    parser = PythonParser()
+
+    info = parser.extract_entity_info(source, "test.py", "MyClass")
+
+    assert info is not None
+    assert info.path == "test.py"
+    assert info.sig is None  # Classes don't have callable signatures
+    assert info.summary == "This is a class docstring."
+
+
+def test_extract_entity_info_class_without_docstring():
+    source = """class EmptyClass:
+    pass
+"""
+    parser = PythonParser()
+
+    info = parser.extract_entity_info(source, "test.py", "EmptyClass")
+
+    assert info is not None
+    assert info.sig is None
+    assert info.summary is None
+
+
+def test_extract_entity_info_module_level():
+    source = '''"""This is a module-level docstring."""
+
+def some_function():
+    pass
+'''
+    parser = PythonParser()
+
+    info = parser.extract_entity_info(source, "test.py", None)
+
+    assert info is not None
+    assert info.path == "test.py"
+    assert info.extent.start == 0
+    assert info.extent.end == 3
+    assert info.sig is None  # Modules don't have signatures
+    assert info.summary == "This is a module-level docstring."
+
+
+def test_extract_entity_info_module_without_docstring():
+    source = """def some_function():
+    pass
+"""
+    parser = PythonParser()
+
+    info = parser.extract_entity_info(source, "test.py", None)
+
+    assert info is not None
+    assert info.sig is None
+    assert info.summary is None
+
+
+def test_extract_entity_info_not_found():
+    source = """def hello():
+    pass
+"""
+    parser = PythonParser()
+
+    info = parser.extract_entity_info(source, "test.py", "nonexistent")
+
+    assert info is None

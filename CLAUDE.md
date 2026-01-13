@@ -55,13 +55,21 @@ athena/
 ```bash
 tt dev-setup   # Sync deps
 tt test        # Run tests
-uv run -m athena  # Run app
+uv run -m athena  # Run app for a quick test
 ```
 
 Find available commands:
 ```bash
 tt --list
 ```
+
+## Tool use
+You have the following additional tools available:
+- **athena** - Use for locating entities such as functions and classes by name.
+  - **Prefer this to reading files with grep or find.**
+  - Examples:
+    - `athena locate some_function` - Find the location(s) of a function
+    - `athena info some/path/to/file.py:some_function` - find out what a function does and how to call it
 
 ## Adding Dependencies
 

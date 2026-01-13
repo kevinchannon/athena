@@ -95,3 +95,111 @@ def test_version_flag():
     assert re.match(expected_output_pattern, result.stdout)
 
 
+def test_app_has_info_command():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "info" in result.stdout
+
+
+def test_info_command_requires_location():
+    # Should fail without location argument
+    result = runner.invoke(app, ["info"])
+
+    assert result.exit_code != 0
+
+
+def test_info_command_shows_help():
+    result = runner.invoke(app, ["info", "--help"])
+
+    assert result.exit_code == 0
+    assert "location" in result.stdout.lower()
+
+
+def test_info_command_with_entity_name(tmp_path, monkeypatch):
+    # Create a test repository
+    test_file = tmp_path / "test.py"
+    test_file.write_text('''def validateSession(token: str = "abc") -> bool:
+    """Validates token."""
+    return True
+''')
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["info", "test.py:validateSession"])
+
+    assert result.exit_code == 0
+    # Verify it's valid JSON
+    data = json.loads(result.stdout)
+    assert data["path"] == "test.py"
+    assert data["sig"]["name"] == "validateSession"
+    assert len(data["sig"]["args"]) == 1
+    assert data["sig"]["args"][0]["name"] == "token"
+    assert data["sig"]["args"][0]["type"] == "str"
+    assert data["sig"]["return_type"] == "bool"
+    assert data["summary"] == "Validates token."
+
+
+def test_info_command_module_level(tmp_path, monkeypatch):
+    # Create a test repository
+    test_file = tmp_path / "test.py"
+    test_file.write_text('''"""Module docstring."""
+
+def some_func():
+    pass
+''')
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["info", "test.py"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["path"] == "test.py"
+    assert "sig" not in data  # sig should be filtered out when None
+    assert data["summary"] == "Module docstring."
+
+
+def test_info_command_entity_not_found(tmp_path, monkeypatch):
+    test_file = tmp_path / "test.py"
+    test_file.write_text("def hello():\n    pass\n")
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["info", "test.py:nonexistent"])
+
+    assert result.exit_code == 1
+    assert "not found" in result.output.lower()
+
+
+def test_info_command_file_not_found(tmp_path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["info", "nonexistent.py:hello"])
+
+    assert result.exit_code == 1
+    assert "not found" in result.output.lower()
+
+
+def test_info_command_without_docstring(tmp_path, monkeypatch):
+    test_file = tmp_path / "test.py"
+    test_file.write_text('''def hello():
+    pass
+''')
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["info", "test.py:hello"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    # summary should be omitted when None
+    assert "summary" not in data
+
+

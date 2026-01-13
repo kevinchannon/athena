@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from athena.models import Entity
+from athena.models import Entity, EntityInfo
 
 
 class BaseParser(ABC):
@@ -16,5 +16,24 @@ class BaseParser(ABC):
 
         Returns:
             List of Entity objects found in the source code
+        """
+        pass
+
+    @abstractmethod
+    def extract_entity_info(
+        self,
+        source_code: str,
+        file_path: str,
+        entity_name: str | None = None
+    ) -> EntityInfo | None:
+        """Extract detailed information about a specific entity.
+
+        Args:
+            source_code: The source code to parse
+            file_path: Relative path to the file (for EntityInfo.path)
+            entity_name: Name of entity to find, or None for module-level
+
+        Returns:
+            EntityInfo object, or None if not found
         """
         pass

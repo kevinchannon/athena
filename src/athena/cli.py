@@ -8,6 +8,7 @@ from typing import Optional
 import typer
 
 from athena import __version__
+from athena.info import get_entity_info
 from athena.locate import locate_entity
 from athena.repository import RepositoryNotFoundError
 
@@ -44,6 +45,62 @@ def locate(entity_name: str):
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=2)
+
+
+@app.command()
+def info(location: str):
+    """Get detailed information about a code entity.
+
+    Args:
+        location: Path to entity in format "file_path:entity_name"
+                 or just "file_path" for module-level info
+
+    Examples:
+        ack info src/auth/session.py:validateSession
+        ack info src/auth/session.py
+    """
+    # Parse location string
+    if ":" in location:
+        file_path, entity_name = location.rsplit(":", 1)
+        # Handle empty entity name after colon
+        if not entity_name:
+            entity_name = None
+    else:
+        file_path = location
+        entity_name = None
+
+    try:
+        # Get entity info
+        entity_info = get_entity_info(file_path, entity_name)
+    except (FileNotFoundError, ValueError, RepositoryNotFoundError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+    # Check if entity was found
+    if entity_info is None:
+        typer.echo(f"Error: Entity '{entity_name}' not found in {file_path}", err=True)
+        raise typer.Exit(code=1)
+
+    # Convert to dict
+    info_dict = asdict(entity_info)
+
+    # Filter out None values (especially summary field)
+    # When summary is None, we want to omit it entirely from JSON
+    def filter_none(d):
+        if isinstance(d, dict):
+            return {k: filter_none(v) for k, v in d.items() if v is not None}
+        elif isinstance(d, list):
+            return [filter_none(item) for item in d]
+        else:
+            return d
+
+    info_dict = filter_none(info_dict)
+
+    # Output as JSON
+    typer.echo(json.dumps(info_dict, indent=2))
 
 
 @app.command()
