@@ -1,3 +1,4 @@
+from athena.models import ClassInfo, ModuleInfo, Parameter
 from athena.parsers.python_parser import PythonParser
 
 
@@ -603,15 +604,20 @@ def test_extract_entity_info_method():
 def test_extract_entity_info_class():
     source = '''class MyClass:
     """This is a class docstring."""
-    pass
+    def method_one(self, x: int) -> str:
+        pass
+
+    def method_two(self):
+        pass
 '''
     parser = PythonParser()
 
     info = parser.extract_entity_info(source, "test.py", "MyClass")
 
     assert info is not None
+    assert isinstance(info, ClassInfo)
     assert info.path == "test.py"
-    assert info.sig is None  # Classes don't have callable signatures
+    assert info.methods == ["method_one(self, x: int) -> str", "method_two(self)"]
     assert info.summary == "This is a class docstring."
 
 
@@ -624,7 +630,8 @@ def test_extract_entity_info_class_without_docstring():
     info = parser.extract_entity_info(source, "test.py", "EmptyClass")
 
     assert info is not None
-    assert info.sig is None
+    assert isinstance(info, ClassInfo)
+    assert info.methods == []
     assert info.summary is None
 
 
@@ -639,10 +646,10 @@ def some_function():
     info = parser.extract_entity_info(source, "test.py", None)
 
     assert info is not None
+    assert isinstance(info, ModuleInfo)
     assert info.path == "test.py"
     assert info.extent.start == 0
     assert info.extent.end == 3
-    assert info.sig is None  # Modules don't have signatures
     assert info.summary == "This is a module-level docstring."
 
 
@@ -655,7 +662,7 @@ def test_extract_entity_info_module_without_docstring():
     info = parser.extract_entity_info(source, "test.py", None)
 
     assert info is not None
-    assert info.sig is None
+    assert isinstance(info, ModuleInfo)
     assert info.summary is None
 
 
@@ -668,3 +675,60 @@ def test_extract_entity_info_not_found():
     info = parser.extract_entity_info(source, "test.py", "nonexistent")
 
     assert info is None
+
+
+def test_format_signature_with_all_param_types():
+    parser = PythonParser()
+    params = [
+        Parameter(name="a", type="int", default="5"),
+        Parameter(name="b", type="str"),
+        Parameter(name="c", default="None"),
+        Parameter(name="d")
+    ]
+
+    sig = parser._format_signature("func", params, "bool")
+
+    assert sig == "func(a: int = 5, b: str, c = None, d) -> bool"
+
+
+def test_format_signature_no_params():
+    parser = PythonParser()
+
+    sig = parser._format_signature("hello", [], None)
+
+    assert sig == "hello()"
+
+
+def test_format_signature_no_return_type():
+    parser = PythonParser()
+    params = [Parameter(name="x", type="int")]
+
+    sig = parser._format_signature("func", params, None)
+
+    assert sig == "func(x: int)"
+
+
+def test_format_signature_complex_types():
+    parser = PythonParser()
+    params = [
+        Parameter(name="x", type="dict[str, Any]"),
+        Parameter(name="y", type="Optional[int]", default="None")
+    ]
+
+    sig = parser._format_signature("process", params, "list[str]")
+
+    assert sig == "process(x: dict[str, Any], y: Optional[int] = None) -> list[str]"
+
+
+def test_format_signature_with_args_kwargs():
+    parser = PythonParser()
+    params = [
+        Parameter(name="self"),
+        Parameter(name="x", type="int"),
+        Parameter(name="*args"),
+        Parameter(name="**kwargs")
+    ]
+
+    sig = parser._format_signature("method", params, "None")
+
+    assert sig == "method(self, x: int, *args, **kwargs) -> None"

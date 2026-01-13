@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from athena.models import Entity, EntityInfo
+from athena.models import ClassInfo, Entity, FunctionInfo, MethodInfo, ModuleInfo
 
 
 class BaseParser(ABC):
@@ -25,7 +25,7 @@ class BaseParser(ABC):
         source_code: str,
         file_path: str,
         entity_name: str | None = None
-    ) -> EntityInfo | None:
+    ) -> FunctionInfo | ClassInfo | MethodInfo | ModuleInfo | None:
         """Extract detailed information about a specific entity.
 
         Args:

@@ -130,15 +130,17 @@ def test_info_command_with_entity_name(tmp_path, monkeypatch):
     result = runner.invoke(app, ["info", "test.py:validateSession"])
 
     assert result.exit_code == 0
-    # Verify it's valid JSON
+    # Verify it's valid JSON with discriminated structure
     data = json.loads(result.stdout)
-    assert data["path"] == "test.py"
-    assert data["sig"]["name"] == "validateSession"
-    assert len(data["sig"]["args"]) == 1
-    assert data["sig"]["args"][0]["name"] == "token"
-    assert data["sig"]["args"][0]["type"] == "str"
-    assert data["sig"]["return_type"] == "bool"
-    assert data["summary"] == "Validates token."
+    assert "function" in data
+    func = data["function"]
+    assert func["path"] == "test.py"
+    assert func["sig"]["name"] == "validateSession"
+    assert len(func["sig"]["args"]) == 1
+    assert func["sig"]["args"][0]["name"] == "token"
+    assert func["sig"]["args"][0]["type"] == "str"
+    assert func["sig"]["return_type"] == "bool"
+    assert func["summary"] == "Validates token."
 
 
 def test_info_command_module_level(tmp_path, monkeypatch):
@@ -157,9 +159,10 @@ def some_func():
 
     assert result.exit_code == 0
     data = json.loads(result.stdout)
-    assert data["path"] == "test.py"
-    assert "sig" not in data  # sig should be filtered out when None
-    assert data["summary"] == "Module docstring."
+    assert "module" in data
+    mod = data["module"]
+    assert mod["path"] == "test.py"
+    assert mod["summary"] == "Module docstring."
 
 
 def test_info_command_entity_not_found(tmp_path, monkeypatch):
@@ -199,7 +202,9 @@ def test_info_command_without_docstring(tmp_path, monkeypatch):
 
     assert result.exit_code == 0
     data = json.loads(result.stdout)
+    assert "function" in data
+    func = data["function"]
     # summary should be omitted when None
-    assert "summary" not in data
+    assert "summary" not in func
 
 

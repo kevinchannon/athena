@@ -1,6 +1,15 @@
 from dataclasses import asdict
 
-from athena.models import Entity, EntityInfo, Location, Parameter, Signature
+from athena.models import (
+    ClassInfo,
+    Entity,
+    FunctionInfo,
+    Location,
+    MethodInfo,
+    ModuleInfo,
+    Parameter,
+    Signature,
+)
 
 
 def test_location_creation():
@@ -80,11 +89,11 @@ def test_signature_without_return_type():
     assert sig.return_type is None
 
 
-def test_entity_info_full():
+def test_function_info_creation():
     location = Location(start=10, end=20)
     params = [Parameter(name="token", type="str", default='"abc"')]
     sig = Signature(name="validate", args=params, return_type="bool")
-    info = EntityInfo(
+    info = FunctionInfo(
         path="src/auth.py",
         extent=location,
         sig=sig,
@@ -97,35 +106,21 @@ def test_entity_info_full():
     assert info.summary == "Validates token."
 
 
-def test_entity_info_without_signature():
-    location = Location(start=5, end=15)
-    info = EntityInfo(
-        path="src/models.py",
-        extent=location,
-        summary="Data models module."
-    )
-
-    assert info.path == "src/models.py"
-    assert info.extent == location
-    assert info.sig is None
-    assert info.summary == "Data models module."
-
-
-def test_entity_info_without_summary():
+def test_function_info_without_summary():
     location = Location(start=1, end=10)
     sig = Signature(name="func", args=[])
-    info = EntityInfo(path="src/utils.py", extent=location, sig=sig)
+    info = FunctionInfo(path="src/utils.py", extent=location, sig=sig)
 
     assert info.path == "src/utils.py"
     assert info.sig == sig
     assert info.summary is None
 
 
-def test_entity_info_to_dict():
+def test_function_info_to_dict():
     location = Location(start=88, end=105)
     params = [Parameter(name="token", type="str", default='"112312daea1313"')]
     sig = Signature(name="validateSession", args=params, return_type="bool")
-    info = EntityInfo(
+    info = FunctionInfo(
         path="src/auth/session.py",
         extent=location,
         sig=sig,
@@ -148,13 +143,122 @@ def test_entity_info_to_dict():
     }
 
 
-def test_entity_info_to_dict_without_summary():
-    location = Location(start=10, end=20)
-    sig = Signature(name="func", args=[])
-    info = EntityInfo(path="src/utils.py", extent=location, sig=sig)
+def test_class_info_creation():
+    location = Location(start=5, end=25)
+    methods = ["add(self, x: int, y: int) -> int", "subtract(self, x: int, y: int) -> int"]
+    info = ClassInfo(
+        path="src/calculator.py",
+        extent=location,
+        methods=methods,
+        summary="Calculator class."
+    )
+
+    assert info.path == "src/calculator.py"
+    assert info.extent == location
+    assert info.methods == methods
+    assert info.summary == "Calculator class."
+
+
+def test_class_info_without_methods():
+    location = Location(start=5, end=10)
+    info = ClassInfo(
+        path="src/empty.py",
+        extent=location,
+        methods=[],
+        summary="Empty class."
+    )
+
+    assert info.methods == []
+
+
+def test_class_info_to_dict():
+    location = Location(start=5, end=25)
+    methods = ["add(self, x: int) -> int"]
+    info = ClassInfo(
+        path="src/calc.py",
+        extent=location,
+        methods=methods,
+        summary="Calculator."
+    )
 
     info_dict = asdict(info)
 
-    # When summary is None, asdict includes it with None value
-    # We'll need to filter this out when generating JSON
-    assert info_dict["summary"] is None
+    assert info_dict == {
+        "path": "src/calc.py",
+        "extent": {"start": 5, "end": 25},
+        "methods": ["add(self, x: int) -> int"],
+        "summary": "Calculator."
+    }
+
+
+def test_method_info_creation():
+    location = Location(start=12, end=15)
+    params = [Parameter(name="self"), Parameter(name="x", type="int")]
+    sig = Signature(name="add", args=params, return_type="int")
+    info = MethodInfo(
+        name="Calculator.add",
+        path="src/calc.py",
+        extent=location,
+        sig=sig,
+        summary="Add method."
+    )
+
+    assert info.name == "Calculator.add"
+    assert info.path == "src/calc.py"
+    assert info.sig == sig
+    assert info.summary == "Add method."
+
+
+def test_method_info_to_dict():
+    location = Location(start=12, end=15)
+    params = [Parameter(name="self"), Parameter(name="x", type="int")]
+    sig = Signature(name="add", args=params, return_type="int")
+    info = MethodInfo(
+        name="Calculator.add",
+        path="src/calc.py",
+        extent=location,
+        sig=sig,
+        summary="Add method."
+    )
+
+    info_dict = asdict(info)
+
+    assert info_dict["name"] == "Calculator.add"
+    assert info_dict["sig"]["name"] == "add"
+
+
+def test_module_info_creation():
+    location = Location(start=0, end=50)
+    info = ModuleInfo(
+        path="src/models.py",
+        extent=location,
+        summary="Data models module."
+    )
+
+    assert info.path == "src/models.py"
+    assert info.extent == location
+    assert info.summary == "Data models module."
+
+
+def test_module_info_without_summary():
+    location = Location(start=0, end=20)
+    info = ModuleInfo(path="src/utils.py", extent=location)
+
+    assert info.summary is None
+
+
+def test_module_info_to_dict():
+    location = Location(start=0, end=50)
+    info = ModuleInfo(
+        path="src/models.py",
+        extent=location,
+        summary="Module docstring."
+    )
+
+    info_dict = asdict(info)
+
+    assert info_dict == {
+        "path": "src/models.py",
+        "extent": {"start": 0, "end": 50},
+        "summary": "Module docstring."
+    }

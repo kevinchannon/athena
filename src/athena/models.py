@@ -34,9 +34,40 @@ class Signature:
 
 
 @dataclass
-class EntityInfo:
-    """Detailed information about a code entity."""
+class FunctionInfo:
+    """Information about a function."""
     path: str
     extent: Location
-    sig: Signature | None = None  # None for modules/classes without callable signature
-    summary: str | None = None  # Docstring, None if absent
+    sig: Signature
+    summary: str | None = None
+
+
+@dataclass
+class ClassInfo:
+    """Information about a class."""
+    path: str
+    extent: Location
+    methods: list[str]  # Formatted method signatures
+    summary: str | None = None
+
+
+@dataclass
+class MethodInfo:
+    """Information about a method."""
+    name: str  # Qualified name: "ClassName.method_name"
+    path: str
+    extent: Location
+    sig: Signature
+    summary: str | None = None
+
+
+@dataclass
+class ModuleInfo:
+    """Information about a module."""
+    path: str
+    extent: Location
+    summary: str | None = None
+
+
+# Union type for entity info
+EntityInfo = FunctionInfo | ClassInfo | MethodInfo | ModuleInfo

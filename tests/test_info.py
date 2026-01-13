@@ -66,7 +66,6 @@ def some_function():
 
     assert info is not None
     assert info.path == "test.py"
-    assert info.sig is None  # Modules don't have signatures
     assert info.summary == "This is a test module."
 
 

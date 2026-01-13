@@ -10,6 +10,7 @@ import typer
 from athena import __version__
 from athena.info import get_entity_info
 from athena.locate import locate_entity
+from athena.models import ClassInfo, FunctionInfo, MethodInfo, ModuleInfo
 from athena.repository import RepositoryNotFoundError
 
 app = typer.Typer(
@@ -84,8 +85,18 @@ def info(location: str):
         typer.echo(f"Error: Entity '{entity_name}' not found in {file_path}", err=True)
         raise typer.Exit(code=1)
 
-    # Convert to dict
-    info_dict = asdict(entity_info)
+    # Wrap in discriminated structure
+    if isinstance(entity_info, FunctionInfo):
+        output = {"function": asdict(entity_info)}
+    elif isinstance(entity_info, ClassInfo):
+        output = {"class": asdict(entity_info)}
+    elif isinstance(entity_info, MethodInfo):
+        output = {"method": asdict(entity_info)}
+    elif isinstance(entity_info, ModuleInfo):
+        output = {"module": asdict(entity_info)}
+    else:
+        typer.echo(f"Error: Unknown entity type: {type(entity_info)}", err=True)
+        raise typer.Exit(code=2)
 
     # Filter out None values (especially summary field)
     # When summary is None, we want to omit it entirely from JSON
@@ -97,10 +108,10 @@ def info(location: str):
         else:
             return d
 
-    info_dict = filter_none(info_dict)
+    output = filter_none(output)
 
     # Output as JSON
-    typer.echo(json.dumps(info_dict, indent=2))
+    typer.echo(json.dumps(output, indent=2))
 
 
 @app.command()

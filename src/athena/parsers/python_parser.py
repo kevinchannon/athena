@@ -1,7 +1,16 @@
 import tree_sitter_python
 from tree_sitter import Language, Parser
 
-from athena.models import Entity, EntityInfo, Location, Parameter, Signature
+from athena.models import (
+    ClassInfo,
+    Entity,
+    FunctionInfo,
+    Location,
+    MethodInfo,
+    ModuleInfo,
+    Parameter,
+    Signature,
+)
 from athena.parsers.base import BaseParser
 
 
@@ -243,12 +252,48 @@ class PythonParser(BaseParser):
             return source_code[return_type_node.start_byte:return_type_node.end_byte]
         return None
 
+    def _format_signature(self, name: str, params: list[Parameter], return_type: str | None) -> str:
+        """Format a signature as a string.
+
+        Args:
+            name: Function/method name
+            params: List of Parameter objects
+            return_type: Return type annotation or None
+
+        Returns:
+            Formatted signature string like "func(x: int = 5, y: str) -> bool"
+        """
+        # Format each parameter
+        param_strs = []
+        for param in params:
+            if param.type and param.default:
+                # Has both type and default: x: int = 5
+                param_strs.append(f"{param.name}: {param.type} = {param.default}")
+            elif param.type:
+                # Has type only: x: int
+                param_strs.append(f"{param.name}: {param.type}")
+            elif param.default:
+                # Has default only: x = 5
+                param_strs.append(f"{param.name} = {param.default}")
+            else:
+                # Plain parameter: x
+                param_strs.append(param.name)
+
+        # Build signature
+        sig = f"{name}({', '.join(param_strs)})"
+
+        # Add return type if present
+        if return_type:
+            sig += f" -> {return_type}"
+
+        return sig
+
     def extract_entity_info(
         self,
         source_code: str,
         file_path: str,
         entity_name: str | None = None
-    ) -> EntityInfo | None:
+    ) -> FunctionInfo | ClassInfo | MethodInfo | ModuleInfo | None:
         """Extract detailed information about a specific entity.
 
         Args:
@@ -268,10 +313,9 @@ class PythonParser(BaseParser):
             # Module extent is from start to end of file
             lines = source_code.splitlines()
             extent = Location(start=0, end=len(lines) - 1 if lines else 0)
-            return EntityInfo(
+            return ModuleInfo(
                 path=file_path,
                 extent=extent,
-                sig=None,  # Modules don't have signatures
                 summary=docstring
             )
 
@@ -289,25 +333,40 @@ class PythonParser(BaseParser):
             elif child.type == "class_definition":
                 name_node = child.child_by_field_name("name")
                 if name_node:
-                    name = source_code[name_node.start_byte:name_node.end_byte]
-                    if name == entity_name:
+                    class_name = source_code[name_node.start_byte:name_node.end_byte]
+                    if class_name == entity_name:
                         return self._build_entity_info_for_class(child, source_code, file_path)
 
-                # Also check methods inside this class
-                body = child.child_by_field_name("body")
-                if body:
-                    for item in body.children:
-                        if item.type == "function_definition":
-                            method_name_node = item.child_by_field_name("name")
-                            if method_name_node:
-                                method_name = source_code[method_name_node.start_byte:method_name_node.end_byte]
-                                if method_name == entity_name:
-                                    return self._build_entity_info_for_function(item, source_code, file_path)
+                    # Also check methods inside this class
+                    body = child.child_by_field_name("body")
+                    if body:
+                        for item in body.children:
+                            if item.type == "function_definition":
+                                method_name_node = item.child_by_field_name("name")
+                                if method_name_node:
+                                    method_name = source_code[method_name_node.start_byte:method_name_node.end_byte]
+                                    if method_name == entity_name:
+                                        # Pass class_name to indicate this is a method
+                                        return self._build_entity_info_for_function(
+                                            item, source_code, file_path, class_name=class_name
+                                        )
 
         return None
 
-    def _build_entity_info_for_function(self, node, source_code: str, file_path: str) -> EntityInfo:
-        """Build EntityInfo for a function or method."""
+    def _build_entity_info_for_function(
+        self, node, source_code: str, file_path: str, class_name: str | None = None
+    ) -> FunctionInfo | MethodInfo:
+        """Build FunctionInfo or MethodInfo for a function or method.
+
+        Args:
+            node: function_definition tree-sitter node
+            source_code: Source code string
+            file_path: Relative file path
+            class_name: Class name if this is a method, None for top-level functions
+
+        Returns:
+            FunctionInfo if class_name is None, MethodInfo otherwise
+        """
         name_node = node.child_by_field_name("name")
         name = source_code[name_node.start_byte:name_node.end_byte] if name_node else ""
 
@@ -324,15 +383,29 @@ class PythonParser(BaseParser):
         end_line = node.end_point[0]
         extent = Location(start=start_line, end=end_line)
 
-        return EntityInfo(
-            path=file_path,
-            extent=extent,
-            sig=sig,
-            summary=docstring
-        )
+        # Return MethodInfo if it's a method, otherwise FunctionInfo
+        if class_name:
+            return MethodInfo(
+                name=f"{class_name}.{name}",
+                path=file_path,
+                extent=extent,
+                sig=sig,
+                summary=docstring
+            )
+        else:
+            return FunctionInfo(
+                path=file_path,
+                extent=extent,
+                sig=sig,
+                summary=docstring
+            )
 
-    def _build_entity_info_for_class(self, node, source_code: str, file_path: str) -> EntityInfo:
-        """Build EntityInfo for a class."""
+    def _build_entity_info_for_class(self, node, source_code: str, file_path: str) -> ClassInfo:
+        """Build ClassInfo for a class, including formatted method signatures."""
+        # Get class name
+        name_node = node.child_by_field_name("name")
+        class_name = source_code[name_node.start_byte:name_node.end_byte] if name_node else ""
+
         # Extract docstring
         docstring = self._extract_docstring(node, source_code)
 
@@ -341,9 +414,24 @@ class PythonParser(BaseParser):
         end_line = node.end_point[0]
         extent = Location(start=start_line, end=end_line)
 
-        return EntityInfo(
+        # Extract methods
+        methods = []
+        body = node.child_by_field_name("body")
+        if body:
+            for item in body.children:
+                if item.type == "function_definition":
+                    method_name_node = item.child_by_field_name("name")
+                    if method_name_node:
+                        method_name = source_code[method_name_node.start_byte:method_name_node.end_byte]
+                        params = self._extract_parameters(item, source_code)
+                        return_type = self._extract_return_type(item, source_code)
+                        # Format as string signature
+                        formatted_sig = self._format_signature(method_name, params, return_type)
+                        methods.append(formatted_sig)
+
+        return ClassInfo(
             path=file_path,
             extent=extent,
-            sig=None,  # Classes don't have callable signatures
+            methods=methods,
             summary=docstring
         )
