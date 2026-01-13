@@ -87,7 +87,7 @@ def test_version_flag_short():
     result = runner.invoke(app, ["-v"])
 
     assert result.exit_code == 0
-    assert re.match(r"athena version \d+\.\d+\.\d+(-[a-z0-9]+)?\n", result.stdout)
+    assert re.match(r"^athena version \d+\.\d+\.\d+(-[a-z0-9]+)?(\+local)?\n", result.stdout)
 
 
 def test_version_flag_long():
