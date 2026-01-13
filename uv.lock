@@ -26,7 +26,7 @@ wheels = [
 
 [[package]]
 name = "athena-code"
-version = "0.0.1"
+version = "0.0.0.dev0+local"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },
