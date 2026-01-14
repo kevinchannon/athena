@@ -51,16 +51,33 @@ def test_locate_command_shows_help():
     assert "locate" in result.stdout.lower()
 
 
-def test_locate_command_outputs_valid_json(tmp_path, monkeypatch):
-    # Create a test repository
-    test_file = tmp_path / "test.py"
-    test_file.write_text("def target():\n    pass\n")
-    (tmp_path / ".git").mkdir()
+def test_locate_command_outputs_table_by_default():
+    # Test with actual repository
+    result = runner.invoke(app, ["locate", "locate_entity"])
 
-    # Change to temp directory
-    monkeypatch.chdir(tmp_path)
+    assert result.exit_code == 0
+    # Check that output is a table (contains table markers)
+    assert "Kind" in result.stdout
+    assert "Path" in result.stdout
+    assert "Extent" in result.stdout
+    assert "function" in result.stdout
 
-    result = runner.invoke(app, ["locate", "target"])
+
+def test_locate_command_outputs_valid_json_with_flag():
+    # Test with actual repository
+    result = runner.invoke(app, ["locate", "--json", "locate_entity"])
+
+    assert result.exit_code == 0
+    # Verify it's valid JSON
+    data = json.loads(result.stdout)
+    assert isinstance(data, list)
+    assert len(data) >= 1
+    assert data[0]["kind"] == "function"
+
+
+def test_locate_command_json_short_flag():
+    # Test with actual repository
+    result = runner.invoke(app, ["locate", "-j", "locate_entity"])
 
     assert result.exit_code == 0
     # Verify it's valid JSON
@@ -68,15 +85,18 @@ def test_locate_command_outputs_valid_json(tmp_path, monkeypatch):
     assert isinstance(data, list)
 
 
-def test_locate_command_returns_empty_array_when_not_found(tmp_path, monkeypatch):
-    # Create a test repository
-    test_file = tmp_path / "test.py"
-    test_file.write_text("def other_function():\n    pass\n")
-    (tmp_path / ".git").mkdir()
+def test_locate_command_returns_empty_table_when_not_found():
+    # Search for something that definitely doesn't exist
+    result = runner.invoke(app, ["locate", "ThisFunctionDefinitelyDoesNotExist"])
 
-    monkeypatch.chdir(tmp_path)
+    assert result.exit_code == 0
+    # Table headers should still be present even when empty
+    assert "Kind" in result.stdout or result.stdout == ""
 
-    result = runner.invoke(app, ["locate", "nonexistent"])
+
+def test_locate_command_returns_empty_json_when_not_found():
+    # Search for something that definitely doesn't exist
+    result = runner.invoke(app, ["locate", "--json", "ThisFunctionDefinitelyDoesNotExist"])
 
     assert result.exit_code == 0
     data = json.loads(result.stdout)

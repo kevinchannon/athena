@@ -1,5 +1,5 @@
 import asyncio
-import json
+import json as json_module
 
 from dataclasses import asdict
 from rich.console import Console
@@ -21,24 +21,43 @@ app = typer.Typer(
 console = Console()
 
 @app.command()
-def locate(entity_name: str):
+def locate(
+    entity_name: str,
+    json: bool = typer.Option(False, "--json", "-j", help="Output as JSON instead of table")
+):
     """Locate entities (functions, classes, methods) by name.
 
     Args:
         entity_name: The name of the entity to search for
+        json: If True, output JSON format; otherwise output as table (default)
     """
     try:
         entities = locate_entity(entity_name)
 
-        # Convert entities to dictionaries and remove the name field (internal only)
-        results = []
-        for entity in entities:
-            entity_dict = asdict(entity)
-            del entity_dict["name"]  # Name is only for internal filtering
-            results.append(entity_dict)
+        if json:
+            # Convert entities to dictionaries and remove the name field (internal only)
+            results = []
+            for entity in entities:
+                entity_dict = asdict(entity)
+                del entity_dict["name"]  # Name is only for internal filtering
+                results.append(entity_dict)
 
-        # Output as JSON
-        typer.echo(json.dumps(results, indent=2))
+            # Output as JSON
+            typer.echo(json_module.dumps(results, indent=2))
+        else:
+            # Output as table
+            from rich.table import Table
+
+            table = Table(show_header=True, header_style="bold cyan", box=None)
+            table.add_column("Kind", style="green")
+            table.add_column("Path", style="blue")
+            table.add_column("Extent", style="yellow")
+
+            for entity in entities:
+                extent_str = f"{entity.extent.start}-{entity.extent.end}"
+                table.add_row(entity.kind, entity.path, extent_str)
+
+            console.print(table)
 
     except RepositoryNotFoundError as e:
         typer.echo(f"Error: {e}", err=True)
@@ -115,7 +134,7 @@ def info(location: str):
     output = filter_none(output)
 
     # Output as JSON
-    typer.echo(json.dumps(output, indent=2))
+    typer.echo(json_module.dumps(output, indent=2))
 
 
 @app.command()
