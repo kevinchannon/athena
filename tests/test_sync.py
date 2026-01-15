@@ -319,3 +319,26 @@ def foo():
             assert "important docstring" in updated_code
             assert "multiple lines" in updated_code
             assert "@athena:" in updated_code
+
+    def test_sync_excludes_athena_package(self):
+        """Test that sync does not modify files under athena package."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+
+            # Create a fake athena package structure
+            athena_dir = repo_root / "src" / "athena"
+            athena_dir.mkdir(parents=True)
+
+            cli_file = athena_dir / "cli.py"
+            cli_file.write_text(
+                """def some_function():
+    return 42
+"""
+            )
+
+            # Create .git to mark as repo root
+            (repo_root / ".git").mkdir()
+
+            # Try to sync the athena package - should raise ValueError
+            with pytest.raises(ValueError, match="Cannot sync excluded path"):
+                sync_entity("src/athena/cli.py:some_function", force=False, repo_root=repo_root)

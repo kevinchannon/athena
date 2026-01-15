@@ -326,7 +326,7 @@ def test_sync_command_single_function(tmp_path):
         text=True,
     )
 
-    assert result.returncode == 1  # 1 entity updated
+    assert result.returncode == 0  # Success
     assert "Updated 1 entity" in result.stdout
 
     # Check file was updated
@@ -369,7 +369,7 @@ def test_sync_command_with_force_flag(tmp_path):
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 1
+    assert result.returncode == 0  # Success
     assert "Updated 1 entity" in result.stdout
 
 

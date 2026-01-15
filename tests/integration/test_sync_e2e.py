@@ -58,8 +58,8 @@ def create_calculator() -> Calculator:
             result = runner.invoke(app, ["sync", "calculator.py", "--recursive"])
 
             # Should succeed
-            assert result.exit_code > 0  # Positive exit code = number of updates
-            assert "Synced" in result.stdout
+            assert result.exit_code == 0  # Success
+            assert "Updated" in result.stdout
 
             # Verify tags were added
             updated_code = module.read_text()
@@ -118,7 +118,7 @@ class Circle:
             result = runner.invoke(app, ["sync", "mathlib", "--recursive"])
 
             # Should succeed
-            assert result.exit_code > 0
+            assert result.exit_code == 0
 
             # Verify tags in arithmetic module
             arith_code = arithmetic.read_text()
@@ -142,7 +142,7 @@ class Circle:
 
             # First sync
             result1 = runner.invoke(app, ["sync", "test.py:func"])
-            assert result1.exit_code == 1  # 1 update
+            assert result1.exit_code == 0  # Success
 
             code_after_first = module.read_text()
 
@@ -251,7 +251,7 @@ class Circle:
 
             # Sync with --force - should update
             result2 = runner.invoke(app, ["sync", "test.py:func", "--force"])
-            assert result2.exit_code == 1
+            assert result2.exit_code == 0  # Success
             assert "Updated" in result2.stdout
 
     def test_sync_entire_project(self):
@@ -268,7 +268,7 @@ class Circle:
             result = runner.invoke(app, ["sync"])
 
             # Should sync all entities
-            assert result.exit_code > 0  # Updated count
+            assert result.exit_code == 0  # Success
 
             # Verify all files have tags
             assert "@athena:" in Path("file1.py").read_text()

@@ -1,11 +1,60 @@
 """Core sync logic for updating @athena tags in docstrings."""
 
+import sys
 from pathlib import Path
 
 from athena.docstring_updater import update_docstring_in_source
 from athena.entity_path import EntityPath, parse_entity_path, resolve_entity_path
 from athena.hashing import compute_class_hash, compute_function_hash
 from athena.parsers.python_parser import PythonParser
+
+
+def should_exclude_path(path: Path, repo_root: Path) -> bool:
+    """Check if a path should be excluded from sync operations.
+
+    Excludes:
+    - athena package itself (prevents self-modification)
+    - virtualenvs (.venv, venv, etc.)
+    - site-packages
+    - Python installation directories
+
+    Args:
+        path: Path to check
+        repo_root: Repository root directory
+
+    Returns:
+        True if path should be excluded, False otherwise
+    """
+    # Convert to absolute path for comparison
+    abs_path = path.resolve()
+
+    # Exclude virtualenvs
+    parts = abs_path.parts
+    if any(part in ['.venv', 'venv', '.virtualenv', 'virtualenv'] for part in parts):
+        return True
+
+    # Exclude site-packages
+    if 'site-packages' in parts:
+        return True
+
+    # Exclude Python installation directories
+    sys_prefix = Path(sys.prefix).resolve()
+    try:
+        abs_path.relative_to(sys_prefix)
+        return True
+    except ValueError:
+        pass
+
+    # Exclude athena package itself
+    try:
+        rel_path = abs_path.relative_to(repo_root)
+        rel_parts = rel_path.parts
+        if rel_parts and rel_parts[0] in ['athena', 'src'] and len(rel_parts) > 1 and rel_parts[1] == 'athena':
+            return True
+    except ValueError:
+        pass
+
+    return False
 
 
 def needs_update(current_hash: str | None, computed_hash: str, force: bool) -> bool:
@@ -59,6 +108,10 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
     resolved_path = resolve_entity_path(entity_path, repo_root)
     if resolved_path is None or not resolved_path.exists():
         raise FileNotFoundError(f"Entity file not found: {entity_path.file_path}")
+
+    # Check if path should be excluded
+    if should_exclude_path(resolved_path, repo_root):
+        raise ValueError(f"Cannot sync excluded path: {entity_path.file_path}")
 
     # For package-level sync, we would need to implement package hash logic
     # For now, focus on module and entity-level sync
@@ -244,6 +297,10 @@ def collect_sub_entities(entity_path: EntityPath, repo_root: Path) -> list[str]:
     if entity_path.is_package:
         # Find all .py files in the package
         for py_file in resolved_path.rglob("*.py"):
+            # Skip excluded paths
+            if should_exclude_path(py_file, repo_root):
+                continue
+
             if py_file.name == "__init__.py":
                 continue  # Skip __init__ for now
 
