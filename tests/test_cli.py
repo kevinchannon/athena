@@ -36,6 +36,13 @@ def test_app_has_uninstall_mcp_command():
     assert "uninstall-mcp" in result.stdout
 
 
+def test_app_has_sync_command():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "sync" in result.stdout
+
+
 def test_locate_command_requires_entity_name():
     # Should fail without entity name argument
     result = runner.invoke(app, ["locate"])
@@ -287,5 +294,61 @@ def test_info_command_package_missing_init(tmp_path, monkeypatch):
 
     assert result.exit_code == 1
     assert "missing __init__.py" in result.output.lower()
+
+
+def test_sync_command_shows_help():
+    """Test that sync command shows help."""
+    result = runner.invoke(app, ["sync", "--help"])
+
+    assert result.exit_code == 0
+    assert "Update @athena hash tags" in result.stdout
+    assert "--force" in result.stdout
+    assert "--recursive" in result.stdout
+
+
+def test_sync_command_single_function(tmp_path, monkeypatch):
+    """Test syncing a single function."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text(
+        """def foo():
+    return 1
+"""
+    )
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["sync", "test.py:foo"])
+
+    assert result.exit_code == 1  # 1 entity updated
+    assert "Updated 1 entity" in result.output
+
+    # Check file was updated
+    updated_code = test_file.read_text()
+    assert "@athena:" in updated_code
+
+
+def test_sync_command_with_force_flag(tmp_path, monkeypatch):
+    """Test sync with --force flag."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text(
+        """def foo():
+    return 1
+"""
+    )
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    # First sync
+    runner.invoke(app, ["sync", "test.py:foo"])
+
+    # Second sync without force - should not update
+    result = runner.invoke(app, ["sync", "test.py:foo"])
+    assert result.exit_code == 0
+    assert "No updates needed" in result.output
+
+    # Third sync with force - should update
+    result = runner.invoke(app, ["sync", "test.py:foo", "--force"])
+    assert result.exit_code == 1
+    assert "Updated 1 entity" in result.output
 
 
