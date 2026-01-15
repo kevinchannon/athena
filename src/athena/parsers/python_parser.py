@@ -1,3 +1,5 @@
+import re
+
 import tree_sitter_python
 from tree_sitter import Language, Parser
 
@@ -551,3 +553,75 @@ class PythonParser(BaseParser):
             methods=methods,
             summary=docstring
         )
+
+    @staticmethod
+    def parse_athena_tag(docstring: str) -> str | None:
+        """Extract hash from @athena tag in docstring.
+
+        Args:
+            docstring: Docstring content to parse
+
+        Returns:
+            12-character hex hash if tag found and valid, None otherwise
+        """
+        if not docstring:
+            return None
+
+        # Look for @athena: <hash> pattern
+        pattern = r"@athena:\s*([0-9a-f]{12})"
+        match = re.search(pattern, docstring, re.IGNORECASE)
+
+        if match:
+            return match.group(1)
+
+        return None
+
+    @staticmethod
+    def update_athena_tag(docstring: str, new_hash: str) -> str:
+        """Update or insert @athena tag in docstring.
+
+        If docstring is empty or None, creates a minimal docstring with the tag.
+        If tag exists, updates it. If tag doesn't exist, appends it.
+
+        Args:
+            docstring: Existing docstring content (may be None or empty)
+            new_hash: New 12-character hex hash to insert
+
+        Returns:
+            Updated docstring with @athena tag
+        """
+        # Handle empty/None docstring - create minimal docstring
+        if not docstring or not docstring.strip():
+            return f"@athena: {new_hash}"
+
+        # Check if tag already exists
+        pattern = r"@athena:\s*[0-9a-f]{12}"
+        if re.search(pattern, docstring, re.IGNORECASE):
+            # Update existing tag
+            return re.sub(
+                pattern, f"@athena: {new_hash}", docstring, flags=re.IGNORECASE
+            )
+        else:
+            # Append tag to end of docstring
+            # Ensure there's a newline before the tag if docstring doesn't end with one
+            if docstring.endswith("\n"):
+                return f"{docstring}@athena: {new_hash}"
+            else:
+                return f"{docstring}\n@athena: {new_hash}"
+
+    @staticmethod
+    def validate_athena_tag(tag: str) -> bool:
+        """Validate that a tag is a proper 12-character hex hash.
+
+        Args:
+            tag: Tag string to validate (without @athena: prefix)
+
+        Returns:
+            True if valid 12-character hex hash, False otherwise
+        """
+        if not tag:
+            return False
+
+        # Must be exactly 12 characters and all hex
+        pattern = r"^[0-9a-f]{12}$"
+        return bool(re.match(pattern, tag, re.IGNORECASE))
