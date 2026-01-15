@@ -308,16 +308,19 @@ def test_sync_command_shows_help():
     assert "recursive" in result.stdout.lower()
 
 
-def test_sync_command_single_function(tmp_path):
+def test_sync_command_single_function(tmp_path, monkeypatch):
     """Test syncing a single function."""
     with runner.isolated_filesystem(temp_dir=tmp_path) as td:
-        test_file = Path(td) / "test.py"
+        # Ensure we're in the isolated directory
+        monkeypatch.chdir(td)
+
+        test_file = Path("test.py")
         test_file.write_text(
             """def foo():
     return 1
 """
         )
-        (Path(td) / ".git").mkdir()
+        Path(".git").mkdir()
 
         result = runner.invoke(app, ["sync", "test.py:foo"])
 
@@ -329,16 +332,19 @@ def test_sync_command_single_function(tmp_path):
         assert "@athena:" in updated_code
 
 
-def test_sync_command_with_force_flag(tmp_path):
+def test_sync_command_with_force_flag(tmp_path, monkeypatch):
     """Test sync with --force flag."""
     with runner.isolated_filesystem(temp_dir=tmp_path) as td:
-        test_file = Path(td) / "test.py"
+        # Ensure we're in the isolated directory
+        monkeypatch.chdir(td)
+
+        test_file = Path("test.py")
         test_file.write_text(
             """def foo():
     return 1
 """
         )
-        (Path(td) / ".git").mkdir()
+        Path(".git").mkdir()
 
         # First sync
         runner.invoke(app, ["sync", "test.py:foo"])

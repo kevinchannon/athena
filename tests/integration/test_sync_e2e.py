@@ -15,11 +15,10 @@ class TestSyncE2E:
     def test_sync_real_python_module(self):
         """Test syncing a realistic Python module with multiple entities."""
         with runner.isolated_filesystem():
-            repo_root = Path.cwd()
-            (repo_root / ".git").mkdir()
+            Path(".git").mkdir()
 
             # Create a realistic module
-            module = repo_root / "calculator.py"
+            module = Path("calculator.py")
             module.write_text(
                 '''"""Calculator module for basic math operations."""
 
@@ -78,11 +77,10 @@ def create_calculator() -> Calculator:
     def test_sync_package_structure(self):
         """Test syncing a package with multiple modules."""
         with runner.isolated_filesystem():
-            repo_root = Path.cwd()
-            (repo_root / ".git").mkdir()
+            Path(".git").mkdir()
 
             # Create package structure
-            pkg = repo_root / "mathlib"
+            pkg = Path("mathlib")
             pkg.mkdir()
             (pkg / "__init__.py").write_text('"""Math library package."""')
 
@@ -133,10 +131,9 @@ class Circle:
     def test_sync_idempotency(self):
         """Test that syncing twice produces same result."""
         with runner.isolated_filesystem():
-            repo_root = Path.cwd()
-            (repo_root / ".git").mkdir()
+            Path(".git").mkdir()
 
-            module = repo_root / "test.py"
+            module = Path("test.py")
             module.write_text(
                 """def func():
     return 42
@@ -162,10 +159,9 @@ class Circle:
     def test_sync_detects_code_changes(self):
         """Test that sync detects when code changes."""
         with runner.isolated_filesystem():
-            repo_root = Path.cwd()
-            (repo_root / ".git").mkdir()
+            Path(".git").mkdir()
 
-            module = repo_root / "test.py"
+            module = Path("test.py")
 
             # Initial version
             module.write_text(
@@ -201,10 +197,9 @@ class Circle:
     def test_sync_with_existing_docstrings(self):
         """Test that sync preserves existing docstring content."""
         with runner.isolated_filesystem():
-            repo_root = Path.cwd()
-            (repo_root / ".git").mkdir()
+            Path(".git").mkdir()
 
-            module = repo_root / "test.py"
+            module = Path("test.py")
             module.write_text(
                 '''def important_function(x, y):
     """This is a very important function.
@@ -237,10 +232,9 @@ class Circle:
     def test_sync_force_flag(self):
         """Test that --force flag forces recalculation."""
         with runner.isolated_filesystem():
-            repo_root = Path.cwd()
-            (repo_root / ".git").mkdir()
+            Path(".git").mkdir()
 
-            module = repo_root / "test.py"
+            module = Path("test.py")
             module.write_text(
                 """def func():
     return 1
@@ -263,13 +257,12 @@ class Circle:
     def test_sync_entire_project(self):
         """Test syncing entire project without specifying entity."""
         with runner.isolated_filesystem():
-            repo_root = Path.cwd()
-            (repo_root / ".git").mkdir()
+            Path(".git").mkdir()
 
             # Create multiple files
-            (repo_root / "file1.py").write_text("def func1():\n    pass\n")
-            (repo_root / "file2.py").write_text("def func2():\n    pass\n")
-            (repo_root / "file3.py").write_text("class MyClass:\n    pass\n")
+            Path("file1.py").write_text("def func1():\n    pass\n")
+            Path("file2.py").write_text("def func2():\n    pass\n")
+            Path("file3.py").write_text("class MyClass:\n    pass\n")
 
             # Sync entire project (no entity specified)
             result = runner.invoke(app, ["sync"])
@@ -278,15 +271,14 @@ class Circle:
             assert result.exit_code > 0  # Updated count
 
             # Verify all files have tags
-            assert "@athena:" in (repo_root / "file1.py").read_text()
-            assert "@athena:" in (repo_root / "file2.py").read_text()
-            assert "@athena:" in (repo_root / "file3.py").read_text()
+            assert "@athena:" in Path("file1.py").read_text()
+            assert "@athena:" in Path("file2.py").read_text()
+            assert "@athena:" in Path("file3.py").read_text()
 
     def test_sync_error_handling(self):
         """Test that sync handles errors gracefully."""
         with runner.isolated_filesystem():
-            repo_root = Path.cwd()
-            (repo_root / ".git").mkdir()
+            Path(".git").mkdir()
 
             # Try to sync non-existent file
             result = runner.invoke(app, ["sync", "nonexistent.py:func"])
