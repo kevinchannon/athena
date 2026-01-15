@@ -196,7 +196,7 @@ def sync(
         repo_root = find_repository_root()
     except RepositoryNotFoundError as e:
         typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=-1)
+        raise typer.Exit(code=255)
 
     # If no entity specified, sync entire project
     if entity is None:
@@ -222,13 +222,13 @@ def sync(
     except NotImplementedError as e:
         typer.echo(f"Error: {e}", err=True)
         typer.echo("\nNote: Module and package-level sync requires --recursive flag")
-        raise typer.Exit(code=-1)
+        raise typer.Exit(code=255)
     except (ValueError, FileNotFoundError) as e:
         typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=-1)
+        raise typer.Exit(code=255)
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=-2)
+        raise typer.Exit(code=254)
 
 
 @app.command()

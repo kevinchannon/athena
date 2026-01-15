@@ -68,8 +68,8 @@ def create_calculator() -> Calculator:
             import re
 
             tags = re.findall(r"@athena:\s*([0-9a-f]{12})", updated_code)
-            # Should have tags for: Calculator class + 4 methods + 1 function = 6 tags
-            assert len(tags) == 6
+            # Should have tags for: Calculator class + 5 methods (__init__, add, subtract, multiply, divide) + 1 function = 7 tags
+            assert len(tags) == 7
 
             # Verify tags are valid hex
             for tag in tags:
