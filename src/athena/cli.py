@@ -203,25 +203,25 @@ def sync(
         entity = "."
         recursive = True
 
+    # Track exit code to use after exception handling
+    exit_code = 0
+
     try:
         if recursive:
             # Use recursive sync
             update_count = sync_recursive(entity, force, repo_root)
             typer.echo(f"Synced {update_count} entities")
-            raise typer.Exit(code=update_count)
+            exit_code = update_count
         else:
             # Use single entity sync
             updated = sync_entity(entity, force, repo_root)
             if updated:
                 typer.echo(f"Updated 1 entity")
-                raise typer.Exit(code=1)
+                exit_code = 1
             else:
                 typer.echo("No updates needed")
-                raise typer.Exit(code=0)
+                exit_code = 0
 
-    except typer.Exit:
-        # Let typer.Exit propagate without catching
-        raise
     except NotImplementedError as e:
         typer.echo(f"Error: {e}", err=True)
         typer.echo("\nNote: Module and package-level sync requires --recursive flag")
@@ -232,6 +232,9 @@ def sync(
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=254)
+
+    # Exit with the appropriate code
+    raise typer.Exit(code=exit_code)
 
 
 @app.command()
