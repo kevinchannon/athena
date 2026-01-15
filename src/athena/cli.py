@@ -11,7 +11,7 @@ from athena import __version__
 from athena.info import get_entity_info
 from athena.locate import locate_entity
 from athena.models import ClassInfo, FunctionInfo, MethodInfo, ModuleInfo, PackageInfo
-from athena.repository import RepositoryNotFoundError
+from athena.repository import RepositoryNotFoundError, find_repository_root
 
 app = typer.Typer(
     help="Athena Code Knowledge - semantic code analysis tool",
@@ -166,6 +166,69 @@ def install_mcp():
     else:
         typer.echo(f"✗ {message}", err=True)
         raise typer.Exit(code=1)
+
+
+@app.command()
+def sync(
+    entity: Optional[str] = typer.Argument(None, help="Entity to sync (module, class, function, etc.)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force hash recalculation even if valid"),
+    recursive: bool = typer.Option(False, "--recursive", "-r", help="Apply recursively to sub-entities"),
+):
+    """Update @athena hash tags in docstrings.
+
+    Updates or inserts @athena hash tags in entity docstrings based on their
+    current code structure. Hashes are computed from the AST and embedded
+    in docstrings for staleness detection.
+
+    If no entity is specified, syncs the entire project recursively.
+
+    Examples:
+        athena sync                                   # Sync entire project
+        athena sync src/module.py                     # Sync all entities in module
+        athena sync src/module.py:MyClass             # Sync specific class
+        athena sync src/module.py:MyClass.method      # Sync specific method
+        athena sync src/package --recursive           # Sync package recursively
+        athena sync src/module.py:func --force        # Force update even if hash matches
+    """
+    from athena.sync import sync_entity, sync_recursive
+
+    try:
+        repo_root = find_repository_root()
+    except RepositoryNotFoundError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=255)
+
+    # If no entity specified, sync entire project
+    if entity is None:
+        entity = "."
+        recursive = True
+
+    try:
+        if recursive:
+            # Use recursive sync
+            update_count = sync_recursive(entity, force, repo_root)
+            if update_count > 0:
+                typer.echo(f"Updated {update_count} entities")
+            else:
+                typer.echo("No updates needed")
+        else:
+            # Use single entity sync
+            updated = sync_entity(entity, force, repo_root)
+            if updated:
+                typer.echo("Updated 1 entity")
+            else:
+                typer.echo("No updates needed")
+
+    except NotImplementedError as e:
+        typer.echo(f"Error: {e}", err=True)
+        typer.echo("\nNote: Module and package-level sync requires --recursive flag")
+        raise typer.Exit(code=1)
+    except (ValueError, FileNotFoundError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
 
 
 @app.command()

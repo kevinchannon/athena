@@ -161,6 +161,71 @@ Currently supported:
 
 - **`ack_locate`** — Find Python entity location (file path + line range)
 
+## Sync Command
+
+The `athena sync` command updates or inserts `@athena` hash tags in entity docstrings. These hashes are computed from the AST and enable staleness detection without external caches or databases.
+
+### Usage
+
+```bash
+# Sync entire project
+athena sync
+
+# Sync specific module (all entities within it)
+athena sync src/module.py --recursive
+
+# Sync specific entity
+athena sync src/module.py:MyClass
+athena sync src/module.py:my_function
+athena sync src/module.py:MyClass.method
+
+# Force recalculation even if hash is valid
+athena sync src/module.py:MyClass --force
+
+# Sync package recursively
+athena sync src/mypackage --recursive
+```
+
+### How It Works
+
+1. Computes AST-derived hash for each entity (function, class, method)
+2. Embeds hash in docstring as `@athena: <hash>` tag
+3. Preserves existing docstring content
+4. Only updates when code changes (unless `--force` is used)
+
+### Example
+
+Before sync:
+```python
+def calculate(x, y):
+    """Add two numbers."""
+    return x + y
+```
+
+After sync:
+```python
+def calculate(x, y):
+    """Add two numbers.
+    @athena: a1b2c3d4e5f6
+    """
+    return x + y
+```
+
+### Exit Codes
+
+- **Positive integer**: Number of entities updated
+- **0**: No updates needed
+- **Negative integer**: Error occurred
+
+### Hash Algorithm
+
+- **Functions/methods**: Hash of signature + body AST
+- **Classes**: Hash of class declaration + all method signatures + implementations
+- **Modules**: Hash of non-whitespace from entity docstrings
+- **Packages**: Hash of non-whitespace from module docstrings
+
+Hashes are 12-character SHA-256 truncations, sufficient for collision avoidance in typical codebases.
+
 ### Installation
 
 Automatic configuration (recommended):

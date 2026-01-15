@@ -1,5 +1,7 @@
 import json
 import re
+import subprocess
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -34,6 +36,13 @@ def test_app_has_uninstall_mcp_command():
 
     assert result.exit_code == 0
     assert "uninstall-mcp" in result.stdout
+
+
+def test_app_has_sync_command():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "sync" in result.stdout
 
 
 def test_locate_command_requires_entity_name():
@@ -287,5 +296,80 @@ def test_info_command_package_missing_init(tmp_path, monkeypatch):
 
     assert result.exit_code == 1
     assert "missing __init__.py" in result.output.lower()
+
+
+def test_sync_command_shows_help():
+    """Test that sync command shows help."""
+    result = runner.invoke(app, ["sync", "--help"])
+
+    assert result.exit_code == 0
+    assert "Update @athena hash tags" in result.stdout
+    # Check for "force" and "recursive" options (may have formatting/ANSI codes)
+    assert "force" in result.stdout.lower()
+    assert "recursive" in result.stdout.lower()
+
+
+def test_sync_command_single_function(tmp_path):
+    """Test syncing a single function."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text(
+        """def foo():
+    return 1
+"""
+    )
+    (tmp_path / ".git").mkdir()
+
+    result = subprocess.run(
+        ["uv", "run", "-m", "athena", "sync", "test.py:foo"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0  # Success
+    assert "Updated 1 entity" in result.stdout
+
+    # Check file was updated
+    updated_code = test_file.read_text()
+    assert "@athena:" in updated_code
+
+
+def test_sync_command_with_force_flag(tmp_path):
+    """Test sync with --force flag."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text(
+        """def foo():
+    return 1
+"""
+    )
+    (tmp_path / ".git").mkdir()
+
+    # First sync
+    subprocess.run(
+        ["uv", "run", "-m", "athena", "sync", "test.py:foo"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    # Second sync without force - should not update
+    result = subprocess.run(
+        ["uv", "run", "-m", "athena", "sync", "test.py:foo"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "No updates needed" in result.stdout
+
+    # Third sync with force - should update
+    result = subprocess.run(
+        ["uv", "run", "-m", "athena", "sync", "test.py:foo", "--force"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0  # Success
+    assert "Updated 1 entity" in result.stdout
 
 
