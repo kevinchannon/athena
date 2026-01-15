@@ -1,17 +1,21 @@
 """End-to-end tests for sync functionality on realistic code."""
 
-import subprocess
-import tempfile
 from pathlib import Path
+
+from typer.testing import CliRunner
+
+from athena.cli import app
+
+runner = CliRunner()
 
 
 class TestSyncE2E:
-    """End-to-end tests running sync via subprocess on realistic code."""
+    """End-to-end tests running sync on realistic code."""
 
     def test_sync_real_python_module(self):
         """Test syncing a realistic Python module with multiple entities."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
+        with runner.isolated_filesystem():
+            repo_root = Path.cwd()
             (repo_root / ".git").mkdir()
 
             # Create a realistic module
@@ -51,16 +55,11 @@ def create_calculator() -> Calculator:
 '''
             )
 
-            # Run sync via subprocess
-            result = subprocess.run(
-                ["python", "-m", "athena", "sync", "calculator.py", "--recursive"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
+            # Run sync
+            result = runner.invoke(app, ["sync", "calculator.py", "--recursive"])
 
             # Should succeed
-            assert result.returncode > 0  # Positive exit code = number of updates
+            assert result.exit_code > 0  # Positive exit code = number of updates
             assert "Synced" in result.stdout
 
             # Verify tags were added
@@ -78,8 +77,8 @@ def create_calculator() -> Calculator:
 
     def test_sync_package_structure(self):
         """Test syncing a package with multiple modules."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
+        with runner.isolated_filesystem():
+            repo_root = Path.cwd()
             (repo_root / ".git").mkdir()
 
             # Create package structure
@@ -118,15 +117,10 @@ class Circle:
             )
 
             # Sync entire package
-            result = subprocess.run(
-                ["python", "-m", "athena", "sync", "mathlib", "--recursive"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
+            result = runner.invoke(app, ["sync", "mathlib", "--recursive"])
 
             # Should succeed
-            assert result.returncode > 0
+            assert result.exit_code > 0
 
             # Verify tags in arithmetic module
             arith_code = arithmetic.read_text()
@@ -138,8 +132,8 @@ class Circle:
 
     def test_sync_idempotency(self):
         """Test that syncing twice produces same result."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
+        with runner.isolated_filesystem():
+            repo_root = Path.cwd()
             (repo_root / ".git").mkdir()
 
             module = repo_root / "test.py"
@@ -150,24 +144,14 @@ class Circle:
             )
 
             # First sync
-            result1 = subprocess.run(
-                ["python", "-m", "athena", "sync", "test.py:func"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
-            assert result1.returncode == 1  # 1 update
+            result1 = runner.invoke(app, ["sync", "test.py:func"])
+            assert result1.exit_code == 1  # 1 update
 
             code_after_first = module.read_text()
 
             # Second sync - should report no updates
-            result2 = subprocess.run(
-                ["python", "-m", "athena", "sync", "test.py:func"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
-            assert result2.returncode == 0  # No updates
+            result2 = runner.invoke(app, ["sync", "test.py:func"])
+            assert result2.exit_code == 0  # No updates
             assert "No updates needed" in result2.stdout
 
             code_after_second = module.read_text()
@@ -177,8 +161,8 @@ class Circle:
 
     def test_sync_detects_code_changes(self):
         """Test that sync detects when code changes."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
+        with runner.isolated_filesystem():
+            repo_root = Path.cwd()
             (repo_root / ".git").mkdir()
 
             module = repo_root / "test.py"
@@ -191,12 +175,7 @@ class Circle:
             )
 
             # First sync
-            subprocess.run(
-                ["python", "-m", "athena", "sync", "test.py:compute"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
+            runner.invoke(app, ["sync", "test.py:compute"])
 
             code_v1 = module.read_text()
             import re
@@ -211,12 +190,7 @@ class Circle:
             )
 
             # Second sync
-            subprocess.run(
-                ["python", "-m", "athena", "sync", "test.py:compute"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
+            runner.invoke(app, ["sync", "test.py:compute"])
 
             code_v2 = module.read_text()
             hash_v2 = re.search(r"@athena:\s*([0-9a-f]{12})", code_v2).group(1)
@@ -226,8 +200,8 @@ class Circle:
 
     def test_sync_with_existing_docstrings(self):
         """Test that sync preserves existing docstring content."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
+        with runner.isolated_filesystem():
+            repo_root = Path.cwd()
             (repo_root / ".git").mkdir()
 
             module = repo_root / "test.py"
@@ -250,12 +224,7 @@ class Circle:
             )
 
             # Sync
-            subprocess.run(
-                ["python", "-m", "athena", "sync", "test.py:important_function"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
+            runner.invoke(app, ["sync", "test.py:important_function"])
 
             # Verify original content preserved
             updated_code = module.read_text()
@@ -267,8 +236,8 @@ class Circle:
 
     def test_sync_force_flag(self):
         """Test that --force flag forces recalculation."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
+        with runner.isolated_filesystem():
+            repo_root = Path.cwd()
             (repo_root / ".git").mkdir()
 
             module = repo_root / "test.py"
@@ -279,37 +248,22 @@ class Circle:
             )
 
             # Initial sync
-            subprocess.run(
-                ["python", "-m", "athena", "sync", "test.py:func"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
+            runner.invoke(app, ["sync", "test.py:func"])
 
             # Sync without changes - should report no updates
-            result1 = subprocess.run(
-                ["python", "-m", "athena", "sync", "test.py:func"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
-            assert result1.returncode == 0
+            result1 = runner.invoke(app, ["sync", "test.py:func"])
+            assert result1.exit_code == 0
             assert "No updates needed" in result1.stdout
 
             # Sync with --force - should update
-            result2 = subprocess.run(
-                ["python", "-m", "athena", "sync", "test.py:func", "--force"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
-            assert result2.returncode == 1
+            result2 = runner.invoke(app, ["sync", "test.py:func", "--force"])
+            assert result2.exit_code == 1
             assert "Updated" in result2.stdout
 
     def test_sync_entire_project(self):
         """Test syncing entire project without specifying entity."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
+        with runner.isolated_filesystem():
+            repo_root = Path.cwd()
             (repo_root / ".git").mkdir()
 
             # Create multiple files
@@ -318,15 +272,10 @@ class Circle:
             (repo_root / "file3.py").write_text("class MyClass:\n    pass\n")
 
             # Sync entire project (no entity specified)
-            result = subprocess.run(
-                ["python", "-m", "athena", "sync"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
+            result = runner.invoke(app, ["sync"])
 
             # Should sync all entities
-            assert result.returncode > 0  # Updated count
+            assert result.exit_code > 0  # Updated count
 
             # Verify all files have tags
             assert "@athena:" in (repo_root / "file1.py").read_text()
@@ -335,18 +284,13 @@ class Circle:
 
     def test_sync_error_handling(self):
         """Test that sync handles errors gracefully."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
+        with runner.isolated_filesystem():
+            repo_root = Path.cwd()
             (repo_root / ".git").mkdir()
 
             # Try to sync non-existent file
-            result = subprocess.run(
-                ["python", "-m", "athena", "sync", "nonexistent.py:func"],
-                cwd=repo_root,
-                capture_output=True,
-                text=True,
-            )
+            result = runner.invoke(app, ["sync", "nonexistent.py:func"])
 
             # Should fail with non-zero exit code
-            assert result.returncode != 0
+            assert result.exit_code != 0
             assert "Error" in result.stdout or "Error" in result.stderr
