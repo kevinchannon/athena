@@ -318,7 +318,13 @@ def test_sync_command_single_function():
         )
         Path(".git").mkdir()
 
-        result = runner.invoke(app, ["sync", "test.py:foo"])
+        result = runner.invoke(app, ["sync", "test.py:foo"], catch_exceptions=False)
+
+        # Debug output
+        if result.exit_code != 1:
+            print(f"Exit code: {result.exit_code}")
+            print(f"Stdout: {result.stdout}")
+            print(f"Exception: {result.exception if hasattr(result, 'exception') else 'None'}")
 
         assert result.exit_code == 1  # 1 entity updated
         assert "Updated 1 entity" in result.stdout
