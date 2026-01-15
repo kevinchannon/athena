@@ -49,8 +49,16 @@ def should_exclude_path(path: Path, repo_root: Path) -> bool:
     try:
         rel_path = abs_path.relative_to(repo_root)
         rel_parts = rel_path.parts
-        if rel_parts and rel_parts[0] in ['athena', 'src'] and len(rel_parts) > 1 and rel_parts[1] == 'athena':
+        # Check for src/athena/ pattern
+        if len(rel_parts) >= 2 and rel_parts[0] == 'src' and rel_parts[1] == 'athena':
             return True
+        # Check for athena/ pattern at root (but only if it's the actual athena package)
+        # We need to be careful not to exclude user files that happen to be in a directory called "athena"
+        # Only exclude if it's actually the athena package with __init__.py
+        if rel_parts and rel_parts[0] == 'athena':
+            potential_package = repo_root / 'athena'
+            if potential_package.is_dir() and (potential_package / '__init__.py').exists():
+                return True
     except ValueError:
         pass
 
