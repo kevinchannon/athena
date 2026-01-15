@@ -320,6 +320,15 @@ def test_sync_command_single_function(tmp_path, monkeypatch):
 
     result = runner.invoke(app, ["sync", "test.py:foo"])
 
+    # Debug output if test fails
+    if result.exit_code != 1:
+        print(f"\nDEBUG: Unexpected exit code: {result.exit_code}")
+        print(f"Output: {result.output}")
+        if hasattr(result, 'exception') and result.exception:
+            print(f"Exception: {result.exception}")
+            import traceback
+            traceback.print_exception(type(result.exception), result.exception, result.exception.__traceback__)
+
     assert result.exit_code == 1  # 1 entity updated
     assert "Updated 1 entity" in result.output
 
