@@ -308,14 +308,10 @@ def test_sync_command_shows_help():
     assert "recursive" in result.stdout.lower()
 
 
-def test_sync_command_single_function(tmp_path, monkeypatch):
+def test_sync_command_single_function():
     """Test syncing a single function."""
-    with runner.isolated_filesystem(temp_dir=tmp_path) as td:
-        # Ensure we're in the isolated directory
-        monkeypatch.chdir(td)
-
-        test_file = Path("test.py")
-        test_file.write_text(
+    with runner.isolated_filesystem():
+        Path("test.py").write_text(
             """def foo():
     return 1
 """
@@ -328,18 +324,14 @@ def test_sync_command_single_function(tmp_path, monkeypatch):
         assert "Updated 1 entity" in result.stdout
 
         # Check file was updated
-        updated_code = test_file.read_text()
+        updated_code = Path("test.py").read_text()
         assert "@athena:" in updated_code
 
 
-def test_sync_command_with_force_flag(tmp_path, monkeypatch):
+def test_sync_command_with_force_flag():
     """Test sync with --force flag."""
-    with runner.isolated_filesystem(temp_dir=tmp_path) as td:
-        # Ensure we're in the isolated directory
-        monkeypatch.chdir(td)
-
-        test_file = Path("test.py")
-        test_file.write_text(
+    with runner.isolated_filesystem():
+        Path("test.py").write_text(
             """def foo():
     return 1
 """
