@@ -219,6 +219,9 @@ def sync(
                 typer.echo("No updates needed")
                 raise typer.Exit(code=0)
 
+    except typer.Exit:
+        # Let typer.Exit propagate without catching
+        raise
     except NotImplementedError as e:
         typer.echo(f"Error: {e}", err=True)
         typer.echo("\nNote: Module and package-level sync requires --recursive flag")

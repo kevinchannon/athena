@@ -347,6 +347,6 @@ class Circle:
                 text=True,
             )
 
-            # Should fail with negative exit code
-            assert result.returncode < 0
+            # Should fail with non-zero exit code
+            assert result.returncode != 0
             assert "Error" in result.stdout or "Error" in result.stderr
