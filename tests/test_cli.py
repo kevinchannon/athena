@@ -307,8 +307,10 @@ def test_sync_command_shows_help():
     assert "recursive" in result.stdout.lower()
 
 
-def test_sync_command_single_function(tmp_path, monkeypatch):
+def test_sync_command_single_function(tmp_path):
     """Test syncing a single function."""
+    import subprocess
+
     test_file = tmp_path / "test.py"
     test_file.write_text(
         """def foo():
@@ -316,29 +318,26 @@ def test_sync_command_single_function(tmp_path, monkeypatch):
 """
     )
     (tmp_path / ".git").mkdir()
-    monkeypatch.chdir(tmp_path)
 
-    result = runner.invoke(app, ["sync", "test.py:foo"])
+    result = subprocess.run(
+        ["python", "-m", "athena", "sync", "test.py:foo"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
 
-    # Debug output if test fails
-    if result.exit_code != 1:
-        print(f"\nDEBUG: Unexpected exit code: {result.exit_code}")
-        print(f"Output: {result.output}")
-        if hasattr(result, 'exception') and result.exception:
-            print(f"Exception: {result.exception}")
-            import traceback
-            traceback.print_exception(type(result.exception), result.exception, result.exception.__traceback__)
-
-    assert result.exit_code == 1  # 1 entity updated
-    assert "Updated 1 entity" in result.output
+    assert result.returncode == 1  # 1 entity updated
+    assert "Updated 1 entity" in result.stdout
 
     # Check file was updated
     updated_code = test_file.read_text()
     assert "@athena:" in updated_code
 
 
-def test_sync_command_with_force_flag(tmp_path, monkeypatch):
+def test_sync_command_with_force_flag(tmp_path):
     """Test sync with --force flag."""
+    import subprocess
+
     test_file = tmp_path / "test.py"
     test_file.write_text(
         """def foo():
@@ -346,19 +345,33 @@ def test_sync_command_with_force_flag(tmp_path, monkeypatch):
 """
     )
     (tmp_path / ".git").mkdir()
-    monkeypatch.chdir(tmp_path)
 
     # First sync
-    runner.invoke(app, ["sync", "test.py:foo"])
+    subprocess.run(
+        ["python", "-m", "athena", "sync", "test.py:foo"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
 
     # Second sync without force - should not update
-    result = runner.invoke(app, ["sync", "test.py:foo"])
-    assert result.exit_code == 0
-    assert "No updates needed" in result.output
+    result = subprocess.run(
+        ["python", "-m", "athena", "sync", "test.py:foo"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "No updates needed" in result.stdout
 
     # Third sync with force - should update
-    result = runner.invoke(app, ["sync", "test.py:foo", "--force"])
-    assert result.exit_code == 1
-    assert "Updated 1 entity" in result.output
+    result = subprocess.run(
+        ["python", "-m", "athena", "sync", "test.py:foo", "--force"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "Updated 1 entity" in result.stdout
 
 
