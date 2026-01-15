@@ -187,6 +187,9 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
 
     # Extract current docstring and parse existing tag
     current_docstring = parser._extract_docstring(entity_node, source_code)
+    # Strip leading/trailing whitespace from docstring to ensure consistent formatting
+    if current_docstring:
+        current_docstring = current_docstring.strip()
     current_hash = (
         parser.parse_athena_tag(current_docstring) if current_docstring else None
     )

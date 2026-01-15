@@ -93,20 +93,11 @@ def update_docstring_in_source(
 
     # Add docstring content with proper indentation
     # Strip existing indentation from each line and apply consistent indentation
-    # Also strip leading/trailing empty lines
-    lines = new_docstring.splitlines()
-    # Remove leading empty lines
-    while lines and not lines[0].strip():
-        lines.pop(0)
-    # Remove trailing empty lines
-    while lines and not lines[-1].strip():
-        lines.pop()
-
-    for line in lines:
+    for line in new_docstring.splitlines():
         stripped = line.lstrip()
         if stripped:  # Non-empty line
             formatted_lines.append(f"{docstring_indent}{stripped}\n")
-        else:  # Empty line (only internal ones now)
+        else:  # Empty line
             formatted_lines.append("\n")
 
     formatted_lines.append(f'{docstring_indent}"""\n')
