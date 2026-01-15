@@ -147,6 +147,12 @@ class PythonParser(BaseParser):
                         break
 
             if class_node:
+                # Get class name
+                class_name_node = class_node.child_by_field_name("name")
+                if not class_name_node:
+                    continue
+                class_name = self._extract_text(source_code, class_name_node.start_byte, class_name_node.end_byte)
+
                 # Find the class body
                 body = class_node.child_by_field_name("body")
                 if body:
@@ -169,7 +175,7 @@ class PythonParser(BaseParser):
                         if method_node:
                             name_node = method_node.child_by_field_name("name")
                             if name_node:
-                                name = self._extract_text(source_code, name_node.start_byte, name_node.end_byte)
+                                method_name = self._extract_text(source_code, name_node.start_byte, name_node.end_byte)
                                 start_line = extent_node.start_point[0]
                                 end_line = extent_node.end_point[0]
 
@@ -177,7 +183,7 @@ class PythonParser(BaseParser):
                                     kind="method",
                                     path=file_path,
                                     extent=Location(start=start_line, end=end_line),
-                                    name=name
+                                    name=f"{class_name}.{method_name}"
                                 ))
 
         return methods
@@ -594,8 +600,8 @@ class PythonParser(BaseParser):
         if not docstring or not docstring.strip():
             return f"@athena: {new_hash}"
 
-        # Check if tag already exists
-        pattern = r"@athena:\s*[0-9a-f]{12}"
+        # Check if tag already exists (match any 12 non-whitespace chars, not just hex)
+        pattern = r"@athena:\s*\S{12}"
         if re.search(pattern, docstring, re.IGNORECASE):
             # Update existing tag
             return re.sub(

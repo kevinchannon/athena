@@ -22,13 +22,13 @@ def serialize_ast_node(node, source_code: str) -> str:
 
     def serialize(n, depth: int = 0):
         """Recursively serialize the node and its children."""
-        # Add node type
-        parts.append(f"{n.type}")
-
-        # For identifier nodes, include the actual name
-        if n.type == "identifier":
+        # For nodes with meaningful text content, include the text
+        if n.type in ("identifier", "integer", "float", "string"):
             text = source_code.encode("utf8")[n.start_byte : n.end_byte].decode("utf8")
-            parts.append(f":{text}")
+            parts.append(f"{n.type}:{text}")
+        else:
+            # Add node type
+            parts.append(f"{n.type}")
 
         # Recursively serialize children
         for child in n.children:
