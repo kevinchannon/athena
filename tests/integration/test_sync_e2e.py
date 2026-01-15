@@ -273,9 +273,9 @@ class Circle:
             (tmp_path / ".git").mkdir()
 
             # Create multiple files
-            tmp_path / "file1.py".write_text("def func1():\n    pass\n")
-            tmp_path / "file2.py".write_text("def func2():\n    pass\n")
-            tmp_path / "file3.py".write_text("class MyClass:\n    pass\n")
+            (tmp_path / "file1.py").write_text("def func1():\n    pass\n")
+            (tmp_path / "file2.py").write_text("def func2():\n    pass\n")
+            (tmp_path / "file3.py").write_text("class MyClass:\n    pass\n")
 
             # Sync entire project (no entity specified)
             result = run_sync([], tmp_path)
@@ -284,9 +284,9 @@ class Circle:
             assert result.returncode == 0  # Success
 
             # Verify all files have tags
-            assert "@athena:" in tmp_path / "file1.py".read_text()
-            assert "@athena:" in tmp_path / "file2.py".read_text()
-            assert "@athena:" in tmp_path / "file3.py".read_text()
+            assert "@athena:" in (tmp_path / "file1.py").read_text()
+            assert "@athena:" in (tmp_path / "file2.py").read_text()
+            assert "@athena:" in (tmp_path / "file3.py").read_text()
 
     def test_sync_error_handling(self):
         """Test that sync handles errors gracefully."""
