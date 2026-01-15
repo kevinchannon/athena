@@ -214,3 +214,130 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
     resolved_path.write_text(updated_source)
 
     return True
+
+
+def collect_sub_entities(entity_path: EntityPath, repo_root: Path) -> list[str]:
+    """Collect all sub-entities for a given entity path.
+
+    For modules: returns all functions, classes, and methods
+    For packages: returns all modules and their entities
+    For classes: returns all methods
+
+    Args:
+        entity_path: Parsed entity path
+        repo_root: Repository root directory
+
+    Returns:
+        List of entity path strings for all sub-entities
+    """
+    resolved_path = resolve_entity_path(entity_path, repo_root)
+    if resolved_path is None:
+        return []
+
+    sub_entities = []
+    parser = PythonParser()
+
+    # Handle package (directory with __init__.py)
+    if entity_path.is_package:
+        # Find all .py files in the package
+        for py_file in resolved_path.rglob("*.py"):
+            if py_file.name == "__init__.py":
+                continue  # Skip __init__ for now
+
+            # Get relative path from repo root
+            rel_path = py_file.relative_to(repo_root)
+
+            # Read file and extract entities
+            source_code = py_file.read_text()
+            entities = parser.extract_entities(source_code, str(rel_path))
+
+            # Add all entities
+            for entity in entities:
+                if entity.kind == "function":
+                    sub_entities.append(f"{rel_path}:{entity.name}")
+                elif entity.kind == "class":
+                    sub_entities.append(f"{rel_path}:{entity.name}")
+                elif entity.kind == "method":
+                    # Method names include class prefix
+                    sub_entities.append(f"{rel_path}:{entity.name}")
+
+        return sub_entities
+
+    # Handle module (single .py file)
+    if entity_path.is_module:
+        source_code = resolved_path.read_text()
+        entities = parser.extract_entities(source_code, entity_path.file_path)
+
+        for entity in entities:
+            if entity.kind == "function":
+                sub_entities.append(f"{entity_path.file_path}:{entity.name}")
+            elif entity.kind == "class":
+                sub_entities.append(f"{entity_path.file_path}:{entity.name}")
+            elif entity.kind == "method":
+                # Method names include class prefix
+                sub_entities.append(f"{entity_path.file_path}:{entity.name}")
+
+        return sub_entities
+
+    # Handle class (return all methods)
+    if entity_path.is_class:
+        source_code = resolved_path.read_text()
+        entities = parser.extract_entities(source_code, entity_path.file_path)
+
+        for entity in entities:
+            if entity.kind == "method" and entity.name.startswith(
+                f"{entity_path.entity_name}."
+            ):
+                sub_entities.append(f"{entity_path.file_path}:{entity.name}")
+
+        return sub_entities
+
+    # For methods or functions, no sub-entities
+    return []
+
+
+def sync_recursive(entity_path_str: str, force: bool, repo_root: Path) -> int:
+    """Recursively sync an entity and all its sub-entities.
+
+    For modules: syncs all functions, classes, and methods
+    For packages: syncs all modules and their entities
+    For classes: syncs the class and all its methods
+    For functions/methods: syncs only that entity
+
+    Args:
+        entity_path_str: Entity path string
+        force: Force update even if hash matches
+        repo_root: Repository root directory
+
+    Returns:
+        Number of entities updated
+    """
+    entity_path = parse_entity_path(entity_path_str)
+
+    # Collect all entities to sync (including the main entity if applicable)
+    entities_to_sync = []
+
+    # For packages and modules, we only sync sub-entities
+    if entity_path.is_package or entity_path.is_module:
+        entities_to_sync = collect_sub_entities(entity_path, repo_root)
+    else:
+        # For classes, sync the class itself and all methods
+        if entity_path.is_class:
+            entities_to_sync.append(entity_path_str)
+            entities_to_sync.extend(collect_sub_entities(entity_path, repo_root))
+        else:
+            # For functions/methods, just sync the entity itself
+            entities_to_sync.append(entity_path_str)
+
+    # Sync all entities
+    update_count = 0
+    for entity in entities_to_sync:
+        try:
+            if sync_entity(entity, force, repo_root):
+                update_count += 1
+        except (ValueError, FileNotFoundError) as e:
+            # Log error but continue with other entities
+            # In a real implementation, we might want to use proper logging
+            print(f"Warning: Failed to sync {entity}: {e}")
+
+    return update_count
