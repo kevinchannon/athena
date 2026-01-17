@@ -6,6 +6,7 @@ from pathlib import Path
 from athena.docstring_updater import update_docstring_in_source
 from athena.entity_path import EntityPath, parse_entity_path, resolve_entity_path
 from athena.hashing import compute_class_hash, compute_function_hash
+from athena.models import EntityStatus, Location
 from athena.parsers.python_parser import PythonParser
 
 
@@ -85,6 +86,165 @@ def needs_update(current_hash: str | None, computed_hash: str, force: bool) -> b
 
     # Update if hashes don't match
     return current_hash != computed_hash
+
+
+def inspect_entity(entity_path_str: str, repo_root: Path) -> EntityStatus:
+    """Inspect an entity and return its status information.
+
+    This function analyzes an entity and computes its current state:
+    - Resolves the entity path to a file
+    - Finds the entity in the AST
+    - Computes the hash from the AST
+    - Extracts the recorded hash from the docstring
+    - Determines entity kind and extent
+
+    Args:
+        entity_path_str: Entity path string (e.g., "src/foo.py:Bar")
+        repo_root: Repository root directory
+
+    Returns:
+        EntityStatus containing all status information
+
+    Raises:
+        FileNotFoundError: If entity file doesn't exist
+        ValueError: If entity is not found in file or path is invalid
+        NotImplementedError: For package/module level inspection
+    """
+    entity_path = parse_entity_path(entity_path_str)
+
+    resolved_path = resolve_entity_path(entity_path, repo_root)
+    if resolved_path is None or not resolved_path.exists():
+        raise FileNotFoundError(f"Entity file not found: {entity_path.file_path}")
+
+    if should_exclude_path(resolved_path, repo_root):
+        raise ValueError(f"Cannot inspect excluded path: {entity_path.file_path}")
+
+    if entity_path.is_package:
+        raise NotImplementedError(
+            "Package-level inspection not yet implemented. "
+            "Use module or entity-level inspection instead."
+        )
+
+    source_code = resolved_path.read_text()
+    parser = PythonParser()
+    tree = parser.parser.parse(bytes(source_code, "utf8"))
+    root_node = tree.root_node
+
+    if entity_path.is_module:
+        raise NotImplementedError(
+            "Module-level inspection not yet implemented. "
+            "Use entity-level inspection instead (e.g., file.py:function_name)."
+        )
+
+    entity_node = None
+    entity_extent_node = None
+
+    for child in root_node.children:
+        if child.type == "function_definition":
+            name_node = child.child_by_field_name("name")
+            if name_node:
+                name = parser._extract_text(
+                    source_code, name_node.start_byte, name_node.end_byte
+                )
+                if name == entity_path.entity_name:
+                    entity_node = child
+                    entity_extent_node = child
+                    break
+
+        elif child.type == "decorated_definition":
+            for subchild in child.children:
+                if subchild.type == "function_definition":
+                    name_node = subchild.child_by_field_name("name")
+                    if name_node:
+                        name = parser._extract_text(
+                            source_code, name_node.start_byte, name_node.end_byte
+                        )
+                        if name == entity_path.entity_name:
+                            entity_node = subchild
+                            entity_extent_node = child
+                            break
+                elif subchild.type == "class_definition":
+                    name_node = subchild.child_by_field_name("name")
+                    if name_node:
+                        name = parser._extract_text(
+                            source_code, name_node.start_byte, name_node.end_byte
+                        )
+                        if name == entity_path.entity_name:
+                            entity_node = subchild
+                            entity_extent_node = child
+                            break
+
+        elif child.type == "class_definition":
+            name_node = child.child_by_field_name("name")
+            if name_node:
+                name = parser._extract_text(
+                    source_code, name_node.start_byte, name_node.end_byte
+                )
+                if name == entity_path.entity_name:
+                    entity_node = child
+                    entity_extent_node = child
+                    break
+
+                if entity_path.is_method and name == entity_path.class_name:
+                    body = child.child_by_field_name("body")
+                    if body:
+                        for item in body.children:
+                            method_node = None
+                            method_extent_node = None
+
+                            if item.type == "function_definition":
+                                method_node = item
+                                method_extent_node = item
+                            elif item.type == "decorated_definition":
+                                for subitem in item.children:
+                                    if subitem.type == "function_definition":
+                                        method_node = subitem
+                                        method_extent_node = item
+                                        break
+
+                            if method_node:
+                                method_name_node = method_node.child_by_field_name(
+                                    "name"
+                                )
+                                if method_name_node:
+                                    method_name = parser._extract_text(
+                                        source_code,
+                                        method_name_node.start_byte,
+                                        method_name_node.end_byte,
+                                    )
+                                    if method_name == entity_path.method_name:
+                                        entity_node = method_node
+                                        entity_extent_node = method_extent_node
+                                        break
+
+    if entity_node is None:
+        raise ValueError(f"Entity not found in file: {entity_path.entity_name}")
+
+    if entity_node.type == "function_definition":
+        computed_hash = compute_function_hash(entity_node, source_code)
+        kind = "method" if entity_path.is_method else "function"
+    elif entity_node.type == "class_definition":
+        computed_hash = compute_class_hash(entity_node, source_code)
+        kind = "class"
+    else:
+        raise ValueError(f"Unsupported entity type: {entity_node.type}")
+
+    current_docstring = parser._extract_docstring(entity_node, source_code)
+    if current_docstring:
+        current_docstring = current_docstring.strip()
+    current_hash = (
+        parser.parse_athena_tag(current_docstring) if current_docstring else None
+    )
+
+    extent_str = f"{entity_extent_node.start_point[0]}-{entity_extent_node.end_point[0]}"
+
+    return EntityStatus(
+        kind=kind,
+        path=entity_path_str,
+        extent=extent_str,
+        recorded_hash=current_hash,
+        calculated_hash=computed_hash
+    )
 
 
 def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
