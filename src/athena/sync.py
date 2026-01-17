@@ -5,7 +5,8 @@ from pathlib import Path
 
 from athena.docstring_updater import update_docstring_in_source
 from athena.entity_path import EntityPath, parse_entity_path, resolve_entity_path
-from athena.hashing import compute_class_hash, compute_function_hash
+from athena.hashing import compute_class_hash, compute_function_hash, compute_module_hash
+from athena.module_docstring_updater import extract_module_docstring
 from athena.models import EntityStatus, Location
 from athena.parsers.python_parser import PythonParser
 
@@ -132,9 +133,32 @@ def inspect_entity(entity_path_str: str, repo_root: Path) -> EntityStatus:
     root_node = tree.root_node
 
     if entity_path.is_module:
-        raise NotImplementedError(
-            "Module-level inspection not yet implemented. "
-            "Use entity-level inspection instead (e.g., file.py:function_name)."
+        # Module-level inspection
+        computed_hash = compute_module_hash(source_code)
+
+        # Extract module docstring
+        current_docstring = extract_module_docstring(source_code)
+        if current_docstring:
+            current_docstring = current_docstring.strip()
+
+        # Parse @athena tag from docstring
+        current_hash = (
+            parser.parse_athena_tag(current_docstring) if current_docstring else None
+        )
+
+        # Module extent is entire file (0-indexed lines)
+        lines = source_code.splitlines()
+        extent = Location(
+            start=0,
+            end=len(lines) - 1 if lines else 0
+        )
+
+        return EntityStatus(
+            kind="module",
+            path=entity_path_str,
+            extent=extent,
+            recorded_hash=current_hash,
+            calculated_hash=computed_hash
         )
 
     entity_node = None
