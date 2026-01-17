@@ -438,3 +438,112 @@ def test_render_status_json():
     assert data[1]["calculated_hash"] == "newnewnewnew"
 
 
+def test_status_json_with_out_of_sync_entities(tmp_path, monkeypatch):
+    """Test status --json with out-of-sync entities."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text(
+        """def foo():
+    return 1
+
+def bar():
+    '''Docstring.
+    @athena: oldoldoldold
+    '''
+    return 2
+"""
+    )
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["status", "--json"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert isinstance(data, list)
+    assert len(data) == 2  # Both foo and bar are out of sync
+
+    # Check structure
+    for item in data:
+        assert "kind" in item
+        assert "path" in item
+        assert "extent" in item
+        assert isinstance(item["extent"], dict)
+        assert "start" in item["extent"]
+        assert "end" in item["extent"]
+        assert "recorded_hash" in item
+        assert "calculated_hash" in item
+
+
+def test_status_json_all_in_sync(tmp_path, monkeypatch):
+    """Test status --json when all entities are in sync."""
+    test_file = tmp_path / "test.py"
+    # First create a function and sync it
+    test_file.write_text(
+        """def foo():
+    return 1
+"""
+    )
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    # Sync the function
+    subprocess.run(
+        ["uv", "run", "-m", "athena", "sync", "test.py:foo"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    # Now check status with --json
+    result = runner.invoke(app, ["status", "--json"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data == []  # Empty list when all in sync
+
+
+def test_status_json_short_flag(tmp_path, monkeypatch):
+    """Test status -j (short flag)."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text(
+        """def foo():
+    return 1
+"""
+    )
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["status", "-j"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert isinstance(data, list)
+
+
+def test_status_json_recursive(tmp_path, monkeypatch):
+    """Test status --json --recursive."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text(
+        """def foo():
+    return 1
+
+class MyClass:
+    def method(self):
+        return 2
+"""
+    )
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["status", "--json", "--recursive"])
+
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert isinstance(data, list)
+    assert len(data) == 3  # foo, MyClass, MyClass.method
+
+

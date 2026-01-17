@@ -319,10 +319,16 @@ def status(
         out_of_sync = filter_out_of_sync(statuses)
 
         if not out_of_sync:
-            typer.echo("All entities are in sync")
+            if json:
+                typer.echo("[]")
+            else:
+                typer.echo("All entities are in sync")
             return
 
-        _render_status_table(out_of_sync)
+        if json:
+            _render_status_json(out_of_sync)
+        else:
+            _render_status_table(out_of_sync)
 
     except NotImplementedError as e:
         typer.echo(f"Error: {e}", err=True)
