@@ -258,9 +258,10 @@ def status(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=255)
 
+    # If no entity specified, check entire project recursively
     if entity is None:
-        typer.echo("Error: Must specify an entity", err=True)
-        raise typer.Exit(code=1)
+        entity = "."
+        recursive = True
 
     try:
         if recursive:
