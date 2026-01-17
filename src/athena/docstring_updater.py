@@ -32,8 +32,15 @@ def update_docstring_in_source(
         raise ValueError(f"Invalid entity location: {entity_location}")
 
     # Find the definition line (function/class declaration)
-    # This is typically the first line of the entity
+    # The entity location may include decorators, so we need to find the actual def/class line
     def_line_idx = entity_location.start
+
+    # Search for the actual def/class line (skip any decorators)
+    for i in range(entity_location.start, min(entity_location.end + 1, len(lines))):
+        stripped = lines[i].lstrip()
+        if stripped.startswith('def ') or stripped.startswith('class '):
+            def_line_idx = i
+            break
 
     # Determine indentation of the entity
     def_line = lines[def_line_idx]

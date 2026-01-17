@@ -460,3 +460,236 @@ def foo():
 
             with pytest.raises(ValueError, match="Entity not found"):
                 inspect_entity("test.py:bar", repo_root)
+
+
+class TestDecoratorHandling:
+    """Tests for correct handling of decorators in sync and status commands."""
+
+    def test_sync_function_with_single_decorator(self):
+        """Test that sync correctly handles functions with single decorator."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@decorator
+def foo():
+    return 1
+"""
+            )
+
+            # Sync the function
+            result = sync_entity("test.py:foo", force=False, repo_root=repo_root)
+            assert result is True
+
+            # Read the updated code
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+
+            # Verify structure: decorator, then def, then docstring
+            assert lines[0] == "@decorator"
+            assert lines[1] == "def foo():"
+            assert lines[2].strip().startswith('"""')
+            assert "@athena:" in updated_code
+
+            # Verify docstring is NOT between decorator and def
+            assert "@decorator\n@athena:" not in updated_code
+            assert '@decorator\n"""' not in updated_code
+
+    def test_sync_function_with_multiple_decorators(self):
+        """Test that sync correctly handles functions with multiple decorators."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@decorator1
+@decorator2
+@decorator3
+def bar():
+    return 2
+"""
+            )
+
+            # Sync the function
+            result = sync_entity("test.py:bar", force=False, repo_root=repo_root)
+            assert result is True
+
+            # Read the updated code
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+
+            # Verify structure: decorators, then def, then docstring
+            assert lines[0] == "@decorator1"
+            assert lines[1] == "@decorator2"
+            assert lines[2] == "@decorator3"
+            assert lines[3] == "def bar():"
+            assert lines[4].strip().startswith('"""')
+            assert "@athena:" in updated_code
+
+            # Verify no docstring between decorators
+            for i in range(3):
+                assert '"""' not in lines[i]
+
+    def test_sync_class_with_decorator(self):
+        """Test that sync correctly handles classes with decorators."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@dataclass
+class MyClass:
+    x: int
+"""
+            )
+
+            # Sync the class
+            result = sync_entity("test.py:MyClass", force=False, repo_root=repo_root)
+            assert result is True
+
+            # Read the updated code
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+
+            # Verify structure: decorator, then class, then docstring
+            assert lines[0] == "@dataclass"
+            assert lines[1] == "class MyClass:"
+            assert lines[2].strip().startswith('"""')
+            assert "@athena:" in updated_code
+
+            # Verify docstring is NOT between decorator and class
+            assert "@dataclass\n@athena:" not in updated_code
+            assert '@dataclass\n"""' not in updated_code
+
+    def test_sync_method_with_decorator(self):
+        """Test that sync correctly handles methods with decorators."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """class MyClass:
+    @property
+    def value(self):
+        return self._value
+"""
+            )
+
+            # Sync the method
+            result = sync_entity("test.py:MyClass.value", force=False, repo_root=repo_root)
+            assert result is True
+
+            # Read the updated code
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+
+            # Find the decorator and method lines
+            decorator_idx = None
+            def_idx = None
+            for i, line in enumerate(lines):
+                if "@property" in line:
+                    decorator_idx = i
+                if "def value" in line:
+                    def_idx = i
+
+            assert decorator_idx is not None
+            assert def_idx is not None
+
+            # Verify decorator comes before def
+            assert decorator_idx < def_idx
+
+            # Verify docstring comes after def, not between decorator and def
+            assert def_idx == decorator_idx + 1
+            assert lines[def_idx + 1].strip().startswith('"""')
+            assert "@athena:" in updated_code
+
+    def test_inspect_identifies_decorated_function(self):
+        """Test that inspect_entity correctly identifies decorated functions."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@decorator
+def foo():
+    return 1
+"""
+            )
+
+            # Inspect should successfully identify the entity
+            status = inspect_entity("test.py:foo", repo_root)
+
+            assert status is not None
+            assert status.kind == "function"
+            # Extent should include the decorator
+            # Format is "start-end" (e.g., "0-2")
+            start, end = map(int, status.extent.split("-"))
+            assert start == 0  # First line (decorator)
+            assert end == 2    # Last line (return statement)
+
+    def test_inspect_identifies_decorated_class(self):
+        """Test that inspect_entity correctly identifies decorated classes."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@dataclass
+class MyClass:
+    x: int
+"""
+            )
+
+            # Inspect should successfully identify the entity
+            status = inspect_entity("test.py:MyClass", repo_root)
+
+            assert status is not None
+            assert status.kind == "class"
+            # Extent should include the decorator
+            # Format is "start-end" (e.g., "0-2")
+            start, _ = map(int, status.extent.split("-"))
+            assert start == 0  # First line (decorator)
+
+    def test_inspect_identifies_decorated_method(self):
+        """Test that inspect_entity correctly identifies decorated methods."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """class MyClass:
+    @staticmethod
+    def helper():
+        return True
+"""
+            )
+
+            # Inspect should successfully identify the entity
+            status = inspect_entity("test.py:MyClass.helper", repo_root)
+
+            assert status is not None
+            assert status.kind == "method"
+            # Extent should include the decorator (relative to class)
+            # Format is "start-end" (e.g., "1-3")
+            start, _ = map(int, status.extent.split("-"))
+            assert start == 1  # @staticmethod line
+
+    def test_sync_decorated_function_preserves_decorator_arguments(self):
+        """Test that decorators with arguments are preserved correctly."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@app.route('/users', methods=['GET', 'POST'])
+def users():
+    return []
+"""
+            )
+
+            # Sync the function
+            result = sync_entity("test.py:users", force=False, repo_root=repo_root)
+            assert result is True
+
+            # Read the updated code
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+
+            # Verify decorator with args is preserved
+            assert "@app.route('/users', methods=['GET', 'POST'])" in lines[0]
+            assert lines[1] == "def users():"
+            assert lines[2].strip().startswith('"""')
+            assert "@athena:" in updated_code
