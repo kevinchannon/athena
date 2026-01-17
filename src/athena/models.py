@@ -76,5 +76,15 @@ class PackageInfo:
     summary: str | None = None
 
 
+@dataclass
+class EntityStatus:
+    """Status information for an entity's hash synchronization state."""
+    kind: str
+    path: str
+    extent: str  # Format: "start-end" or empty for packages/modules
+    recorded_hash: str | None  # Hash from docstring, None if no hash
+    calculated_hash: str  # Hash computed from AST
+
+
 # Union type for entity info
 EntityInfo = FunctionInfo | ClassInfo | MethodInfo | ModuleInfo | PackageInfo

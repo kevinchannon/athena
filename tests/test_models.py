@@ -3,6 +3,7 @@ from dataclasses import asdict
 from athena.models import (
     ClassInfo,
     Entity,
+    EntityStatus,
     FunctionInfo,
     Location,
     MethodInfo,
@@ -302,3 +303,44 @@ def test_package_info_no_extent():
     # PackageInfo should not have extent attribute
     assert not hasattr(info, 'extent')
     assert not hasattr(info, 'sig')
+
+
+def test_entity_status_creation():
+    status = EntityStatus(
+        kind="function",
+        path="src/example.py:my_func",
+        extent="10-20",
+        recorded_hash="abc123",
+        calculated_hash="def456"
+    )
+
+    assert status.kind == "function"
+    assert status.path == "src/example.py:my_func"
+    assert status.extent == "10-20"
+    assert status.recorded_hash == "abc123"
+    assert status.calculated_hash == "def456"
+
+
+def test_entity_status_no_recorded_hash():
+    status = EntityStatus(
+        kind="class",
+        path="src/models.py:MyClass",
+        extent="5-15",
+        recorded_hash=None,
+        calculated_hash="xyz789"
+    )
+
+    assert status.recorded_hash is None
+    assert status.calculated_hash == "xyz789"
+
+
+def test_entity_status_module_no_extent():
+    status = EntityStatus(
+        kind="module",
+        path="src/utils.py",
+        extent="",
+        recorded_hash="old123",
+        calculated_hash="new456"
+    )
+
+    assert status.extent == ""

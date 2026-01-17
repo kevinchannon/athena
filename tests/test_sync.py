@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from athena.sync import needs_update, sync_entity
+from athena.sync import inspect_entity, needs_update, sync_entity
 
 
 class TestNeedsUpdate:
@@ -340,5 +340,123 @@ def foo():
             (repo_root / ".git").mkdir()
 
             # Try to sync the athena package - should raise ValueError
-            with pytest.raises(ValueError, match="Cannot sync excluded path"):
+            with pytest.raises(ValueError, match="Cannot inspect excluded path"):
                 sync_entity("src/athena/cli.py:some_function", force=False, repo_root=repo_root)
+
+
+class TestInspectEntity:
+    """Tests for inspect_entity function."""
+
+    def test_inspect_function_without_hash(self):
+        """Test inspecting function that has no @athena tag."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """def foo():
+    return 1
+"""
+            )
+
+            status = inspect_entity("test.py:foo", repo_root)
+
+            assert status.kind == "function"
+            assert status.path == "test.py:foo"
+            assert status.extent == "0-1"
+            assert status.recorded_hash is None
+            assert len(status.calculated_hash) == 12
+
+    def test_inspect_function_with_hash(self):
+        """Test inspecting function with existing @athena tag."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                '''def foo():
+    """Docstring.
+    @athena: abc123def456
+    """
+    return 1
+'''
+            )
+
+            status = inspect_entity("test.py:foo", repo_root)
+
+            assert status.kind == "function"
+            assert status.recorded_hash == "abc123def456"
+            assert status.calculated_hash != "abc123def456"
+
+    def test_inspect_class(self):
+        """Test inspecting class."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """class MyClass:
+    pass
+"""
+            )
+
+            status = inspect_entity("test.py:MyClass", repo_root)
+
+            assert status.kind == "class"
+            assert status.path == "test.py:MyClass"
+            assert len(status.calculated_hash) == 12
+
+    def test_inspect_method(self):
+        """Test inspecting class method."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """class MyClass:
+    def my_method(self):
+        return 42
+"""
+            )
+
+            status = inspect_entity("test.py:MyClass.my_method", repo_root)
+
+            assert status.kind == "method"
+            assert status.path == "test.py:MyClass.my_method"
+            assert len(status.calculated_hash) == 12
+
+    def test_inspect_decorated_function(self):
+        """Test inspecting decorated function."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@decorator
+def foo():
+    return 1
+"""
+            )
+
+            status = inspect_entity("test.py:foo", repo_root)
+
+            assert status.kind == "function"
+            # Extent should include decorator
+            assert status.extent.startswith("0-")
+
+    def test_inspect_nonexistent_file_raises_error(self):
+        """Test that inspecting nonexistent file raises error."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+
+            with pytest.raises(FileNotFoundError):
+                inspect_entity("nonexistent.py:foo", repo_root)
+
+    def test_inspect_nonexistent_entity_raises_error(self):
+        """Test that inspecting nonexistent entity raises error."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """def foo():
+    pass
+"""
+            )
+
+            with pytest.raises(ValueError, match="Entity not found"):
+                inspect_entity("test.py:bar", repo_root)
