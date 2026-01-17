@@ -89,7 +89,7 @@ async def _handle_locate(entity: str) -> list[TextContent]:
     try:
         # Call the CLI tool
         result = subprocess.run(
-            ["athens", "locate", "-j", entity],
+            ["athena", "locate", "-j", entity],
             capture_output=True,
             text=True,
             check=True,
@@ -162,7 +162,7 @@ async def _handle_info(location: str) -> list[TextContent]:
     try:
         # Call the CLI tool
         result = subprocess.run(
-            ["ack", "info", location],
+            ["athena", "info", location],
             capture_output=True,
             text=True,
             check=True,
