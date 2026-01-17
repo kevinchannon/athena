@@ -175,6 +175,39 @@ def inspect_entity(entity_path_str: str, repo_root: Path) -> EntityStatus:
                             entity_extent_node = child
                             break
 
+                        # Check if we're looking for a method within this decorated class
+                        if entity_path.is_method and name == entity_path.class_name:
+                            body = subchild.child_by_field_name("body")
+                            if body:
+                                for item in body.children:
+                                    method_node = None
+                                    method_extent_node = None
+
+                                    if item.type == "function_definition":
+                                        method_node = item
+                                        method_extent_node = item
+                                    elif item.type == "decorated_definition":
+                                        for subitem in item.children:
+                                            if subitem.type == "function_definition":
+                                                method_node = subitem
+                                                method_extent_node = item
+                                                break
+
+                                    if method_node:
+                                        method_name_node = method_node.child_by_field_name(
+                                            "name"
+                                        )
+                                        if method_name_node:
+                                            method_name = parser._extract_text(
+                                                source_code,
+                                                method_name_node.start_byte,
+                                                method_name_node.end_byte,
+                                            )
+                                            if method_name == entity_path.method_name:
+                                                entity_node = method_node
+                                                entity_extent_node = method_extent_node
+                                                break
+
         elif child.type == "class_definition":
             name_node = child.child_by_field_name("name")
             if name_node:
@@ -317,6 +350,39 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
                             entity_node = subchild
                             entity_extent_node = child
                             break
+
+                        # Check if we're looking for a method within this decorated class
+                        if entity_path.is_method and name == entity_path.class_name:
+                            body = subchild.child_by_field_name("body")
+                            if body:
+                                for item in body.children:
+                                    method_node = None
+                                    method_extent_node = None
+
+                                    if item.type == "function_definition":
+                                        method_node = item
+                                        method_extent_node = item
+                                    elif item.type == "decorated_definition":
+                                        for subitem in item.children:
+                                            if subitem.type == "function_definition":
+                                                method_node = subitem
+                                                method_extent_node = item
+                                                break
+
+                                    if method_node:
+                                        method_name_node = method_node.child_by_field_name(
+                                            "name"
+                                        )
+                                        if method_name_node:
+                                            method_name = parser._extract_text(
+                                                source_code,
+                                                method_name_node.start_byte,
+                                                method_name_node.end_byte,
+                                            )
+                                            if method_name == entity_path.method_name:
+                                                entity_node = method_node
+                                                entity_extent_node = method_extent_node
+                                                break
 
         elif child.type == "class_definition":
             name_node = child.child_by_field_name("name")

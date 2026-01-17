@@ -666,6 +666,97 @@ class MyClass(
             assert "**kwargs" in updated_code
 
 
+class TestDecoratedClassMethods:
+    """Tests for syncing methods within decorated classes."""
+
+    def test_sync_method_in_decorated_class(self):
+        """Test syncing a regular method in a decorated class."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@decorator
+class MyClass:
+    def my_method(self):
+        return "hello"
+"""
+            )
+
+            # Sync the method
+            result = sync_entity("test.py:MyClass.my_method", force=False, repo_root=repo_root)
+            assert result is True
+
+            updated_code = test_file.read_text()
+            assert "@athena:" in updated_code
+            # Decorator should still be present
+            assert "@decorator" in updated_code
+
+    def test_sync_post_init_in_dataclass(self):
+        """Test syncing __post_init__ method in a dataclass."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """from dataclasses import dataclass
+
+@dataclass
+class Environment:
+    name: str
+
+    def __post_init__(self):
+        pass
+"""
+            )
+
+            # Sync the __post_init__ method
+            result = sync_entity("test.py:Environment.__post_init__", force=False, repo_root=repo_root)
+            assert result is True
+
+            updated_code = test_file.read_text()
+            assert "@athena:" in updated_code
+            assert "@dataclass" in updated_code
+
+    def test_inspect_method_in_decorated_class(self):
+        """Test inspecting a method in a decorated class."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@dataclass
+class MyClass:
+    x: int
+
+    def process(self):
+        return self.x * 2
+"""
+            )
+
+            # Inspect should find the method
+            status = inspect_entity("test.py:MyClass.process", repo_root)
+
+            assert status is not None
+            assert status.kind == "method"
+
+    def test_sync_dunder_init_in_decorated_class(self):
+        """Test syncing __init__ method in a decorated class."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@decorator
+class MyClass:
+    def __init__(self, value):
+        self.value = value
+"""
+            )
+
+            result = sync_entity("test.py:MyClass.__init__", force=False, repo_root=repo_root)
+            assert result is True
+
+            updated_code = test_file.read_text()
+            assert "@athena:" in updated_code
+
+
 class TestDecoratorHandling:
     """Tests for correct handling of decorators in sync and status commands."""
 
