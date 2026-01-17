@@ -14,6 +14,7 @@ class TestStatusE2E:
         """Test status command on single function without hash."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
             test_file = repo_root / "test.py"
             test_file.write_text(
                 """def foo():
@@ -38,6 +39,7 @@ class TestStatusE2E:
         """Test status command on function with correct hash."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
             test_file = repo_root / "test.py"
             test_file.write_text(
                 """def foo():
@@ -67,6 +69,7 @@ class TestStatusE2E:
         """Test status command with --recursive on module."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
             test_file = repo_root / "test.py"
             test_file.write_text(
                 """def foo():
@@ -99,6 +102,7 @@ class MyClass:
         """Test status command with -r on class."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
             test_file = repo_root / "test.py"
             test_file.write_text(
                 """class MyClass:
@@ -127,6 +131,7 @@ class MyClass:
         """Test status command with no entity (entire project)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
 
             # Create multiple files
             file1 = repo_root / "test1.py"
@@ -159,6 +164,7 @@ class MyClass:
         """Test status command with nonexistent entity."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
             test_file = repo_root / "test.py"
             test_file.write_text(
                 """def foo():
@@ -181,6 +187,7 @@ class MyClass:
         """Test status command with nonexistent file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
 
             result = subprocess.run(
                 ["uv", "run", "-m", "athena", "status", "nonexistent.py:foo"],
@@ -196,6 +203,7 @@ class MyClass:
         """Test that status detects out-of-sync after code change."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
             test_file = repo_root / "test.py"
 
             # Create and sync initial version
@@ -234,6 +242,7 @@ class MyClass:
         """Test status with mix of synced and unsynced entities."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
             test_file = repo_root / "test.py"
             test_file.write_text(
                 """def foo():

@@ -340,7 +340,7 @@ def foo():
             (repo_root / ".git").mkdir()
 
             # Try to sync the athena package - should raise ValueError
-            with pytest.raises(ValueError, match="Cannot sync excluded path"):
+            with pytest.raises(ValueError, match="Cannot inspect excluded path"):
                 sync_entity("src/athena/cli.py:some_function", force=False, repo_root=repo_root)
 
 
