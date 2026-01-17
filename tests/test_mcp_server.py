@@ -7,16 +7,23 @@ from athena import mcp_server
 
 @pytest.mark.asyncio
 async def test_list_tools():
-    """Test that list_tools returns the ack_locate tool."""
+    """Test that list_tools returns the ack_locate and ack_info tools."""
     # Call the handler function directly
     tools = await mcp_server.list_tools()
 
-    assert len(tools) == 1
-    tool = tools[0]
+    assert len(tools) == 2
 
-    assert tool.name == "ack_locate"
-    assert "Python" in tool.description
-    assert "entity" in tool.inputSchema["properties"]
+    # Check ack_locate tool
+    locate_tool = tools[0]
+    assert locate_tool.name == "ack_locate"
+    assert "Python" in locate_tool.description
+    assert "entity" in locate_tool.inputSchema["properties"]
+
+    # Check ack_info tool
+    info_tool = tools[1]
+    assert info_tool.name == "ack_info"
+    assert "detailed information" in info_tool.description
+    assert "location" in info_tool.inputSchema["properties"]
 
 
 @pytest.mark.asyncio
