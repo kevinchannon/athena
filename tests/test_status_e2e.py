@@ -286,14 +286,15 @@ def bar():
             (repo_root / ".git").mkdir()
             test_file = repo_root / "test.py"
             test_file.write_text(
-                'def foo():\n'
-                '    return 1\n'
-                '\n'
-                'def bar():\n'
-                '    """Docstring.\n'
-                '    @athena: oldoldoldold\n'
-                '    """\n'
-                '    return 2\n'
+                '''def foo():
+    return 1
+
+def bar():
+    """Docstring.
+@athena: oldoldoldold
+    """
+    return 2
+'''
             )
 
             result = subprocess.run(
