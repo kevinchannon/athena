@@ -373,3 +373,189 @@ def test_sync_command_with_force_flag(tmp_path):
     assert "Updated 1 entity" in result.stdout
 
 
+def test_status_command_accepts_json_flag():
+    """Test that status command accepts --json flag."""
+    result = runner.invoke(app, ["status", "--help"])
+
+    assert result.exit_code == 0
+    assert "--json" in result.stdout or "-j" in result.stdout
+
+
+def test_render_status_json():
+    """Test JSON rendering of EntityStatus objects."""
+    from athena.cli import _render_status_json
+    from athena.models import EntityStatus, Location
+    from io import StringIO
+    import sys
+
+    # Create mock EntityStatus objects
+    statuses = [
+        EntityStatus(
+            kind="function",
+            path="test.py:foo",
+            extent=Location(start=10, end=15),
+            recorded_hash=None,
+            calculated_hash="abc123def456"
+        ),
+        EntityStatus(
+            kind="method",
+            path="test.py:MyClass.bar",
+            extent=Location(start=20, end=25),
+            recorded_hash="oldoldoldold",
+            calculated_hash="newnewnewnew"
+        )
+    ]
+
+    # Capture output
+    captured_output = StringIO()
+    sys.stdout = captured_output
+
+    try:
+        _render_status_json(statuses)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = sys.__stdout__
+
+    # Verify JSON structure
+    data = json.loads(output)
+    assert isinstance(data, list)
+    assert len(data) == 2
+
+    # Check first entity
+    assert data[0]["kind"] == "function"
+    assert data[0]["path"] == "test.py:foo"
+    assert data[0]["extent"]["start"] == 10
+    assert data[0]["extent"]["end"] == 15
+    assert data[0]["recorded_hash"] is None  # null in JSON
+    assert data[0]["calculated_hash"] == "abc123def456"
+
+    # Check second entity
+    assert data[1]["kind"] == "method"
+    assert data[1]["path"] == "test.py:MyClass.bar"
+    assert data[1]["extent"]["start"] == 20
+    assert data[1]["extent"]["end"] == 25
+    assert data[1]["recorded_hash"] == "oldoldoldold"
+    assert data[1]["calculated_hash"] == "newnewnewnew"
+
+
+def test_status_json_with_out_of_sync_entities(tmp_path):
+    """Test status --json with out-of-sync entities."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text(
+        '''def foo():
+    return 1
+
+def bar():
+    """Docstring.
+    @athena: oldoldoldold
+    """
+    return 2
+'''
+    )
+    (tmp_path / ".git").mkdir()
+
+    result = subprocess.run(
+        ["uv", "run", "-m", "athena", "status", "--json"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert isinstance(data, list)
+    assert len(data) == 2  # Both foo and bar are out of sync
+
+    # Check structure
+    for item in data:
+        assert "kind" in item
+        assert "path" in item
+        assert "extent" in item
+        assert isinstance(item["extent"], dict)
+        assert "start" in item["extent"]
+        assert "end" in item["extent"]
+        assert "recorded_hash" in item
+        assert "calculated_hash" in item
+
+
+def test_status_json_all_in_sync(tmp_path):
+    """Test status --json when all entities are in sync."""
+    test_file = tmp_path / "test.py"
+    # First create a function and sync it
+    test_file.write_text(
+        """def foo():
+    return 1
+"""
+    )
+    (tmp_path / ".git").mkdir()
+
+    # Sync the function
+    subprocess.run(
+        ["uv", "run", "-m", "athena", "sync", "test.py:foo"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    # Now check status with --json
+    result = subprocess.run(
+        ["uv", "run", "-m", "athena", "status", "--json"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data == []  # Empty list when all in sync
+
+
+def test_status_json_short_flag(tmp_path):
+    """Test status -j (short flag)."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text(
+        """def foo():
+    return 1
+"""
+    )
+    (tmp_path / ".git").mkdir()
+
+    result = subprocess.run(
+        ["uv", "run", "-m", "athena", "status", "-j"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert isinstance(data, list)
+
+
+def test_status_json_recursive(tmp_path):
+    """Test status --json --recursive."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text(
+        """def foo():
+    return 1
+
+class MyClass:
+    def method(self):
+        return 2
+"""
+    )
+    (tmp_path / ".git").mkdir()
+
+    result = subprocess.run(
+        ["uv", "run", "-m", "athena", "status", "--json", "--recursive"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert isinstance(data, list)
+    assert len(data) == 3  # foo, MyClass, MyClass.method
+
+

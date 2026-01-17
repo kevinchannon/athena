@@ -231,10 +231,59 @@ def sync(
         raise typer.Exit(code=2)
 
 
+def _render_status_table(out_of_sync):
+    """Render entity statuses as a table.
+
+    Args:
+        out_of_sync: List of EntityStatus objects to render
+    """
+    from rich.table import Table
+
+    typer.echo(f"{len(out_of_sync)} entities need updating")
+    typer.echo()
+
+    table = Table(show_header=True, header_style="bold cyan", box=None)
+    table.add_column("Kind", style="green")
+    table.add_column("Path", style="blue")
+    table.add_column("Extent", style="yellow")
+    table.add_column("Recorded Hash", style="magenta")
+    table.add_column("Calc. Hash", style="magenta")
+
+    for status_item in out_of_sync:
+        recorded = status_item.recorded_hash or "<NONE>"
+        extent_str = f"{status_item.extent.start}-{status_item.extent.end}"
+        table.add_row(
+            status_item.kind,
+            status_item.path,
+            extent_str,
+            recorded,
+            status_item.calculated_hash
+        )
+
+    console.print(table)
+
+
+def _render_status_json(out_of_sync):
+    """Render entity statuses as JSON.
+
+    Args:
+        out_of_sync: List of EntityStatus objects to render
+    """
+    results = []
+    for status_item in out_of_sync:
+        status_dict = asdict(status_item)
+        # Convert None to null in JSON (not the string "<NONE>")
+        # asdict already does this correctly
+        results.append(status_dict)
+
+    typer.echo(json_module.dumps(results, indent=2))
+
+
 @app.command()
 def status(
     entity: Optional[str] = typer.Argument(None, help="Entity to check status for"),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Check entity and all sub-entities"),
+    json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
 ):
     """Check docstring hash synchronization status.
 
@@ -250,7 +299,6 @@ def status(
         athena status src/module.py --recursive        # Check all entities in module
     """
     from athena.status import check_status, check_status_recursive, filter_out_of_sync
-    from rich.table import Table
 
     try:
         repo_root = find_repository_root()
@@ -271,30 +319,16 @@ def status(
         out_of_sync = filter_out_of_sync(statuses)
 
         if not out_of_sync:
-            typer.echo("All entities are in sync")
+            if json:
+                typer.echo("[]")
+            else:
+                typer.echo("All entities are in sync")
             return
 
-        typer.echo(f"{len(out_of_sync)} entities need updating")
-        typer.echo()
-
-        table = Table(show_header=True, header_style="bold cyan", box=None)
-        table.add_column("Kind", style="green")
-        table.add_column("Path", style="blue")
-        table.add_column("Extent", style="yellow")
-        table.add_column("Recorded Hash", style="magenta")
-        table.add_column("Calc. Hash", style="magenta")
-
-        for status_item in out_of_sync:
-            recorded = status_item.recorded_hash or "<NONE>"
-            table.add_row(
-                status_item.kind,
-                status_item.path,
-                status_item.extent,
-                recorded,
-                status_item.calculated_hash
-            )
-
-        console.print(table)
+        if json:
+            _render_status_json(out_of_sync)
+        else:
+            _render_status_table(out_of_sync)
 
     except NotImplementedError as e:
         typer.echo(f"Error: {e}", err=True)
