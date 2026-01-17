@@ -303,6 +303,12 @@ def bar():
                 text=True
             )
 
+            # Debug output
+            print(f"\n=== Test file content ===\n{test_file.read_text()}")
+            print(f"\n=== Status output ===\n{result.stdout}")
+            if result.stderr:
+                print(f"\n=== Status stderr ===\n{result.stderr}")
+
             assert result.returncode == 0
             data = json.loads(result.stdout)
             assert isinstance(data, list)
@@ -328,6 +334,7 @@ def bar():
 
             # Check that bar has the old hash
             bar_item = next(item for item in data if item["path"] == "test.py:bar")
+            print(f"\n=== bar_item ===\n{bar_item}")
             assert bar_item["recorded_hash"] == "oldoldoldold"
 
     def test_status_json_all_in_sync(self):
