@@ -270,12 +270,15 @@ def inspect_entity(entity_path_str: str, repo_root: Path) -> EntityStatus:
         parser.parse_athena_tag(current_docstring) if current_docstring else None
     )
 
-    extent_str = f"{entity_extent_node.start_point[0]}-{entity_extent_node.end_point[0]}"
+    extent = Location(
+        start=entity_extent_node.start_point[0],
+        end=entity_extent_node.end_point[0]
+    )
 
     return EntityStatus(
         kind=kind,
         path=entity_path_str,
-        extent=extent_str,
+        extent=extent,
         recorded_hash=current_hash,
         calculated_hash=computed_hash
     )

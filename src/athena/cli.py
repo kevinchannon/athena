@@ -286,10 +286,11 @@ def status(
 
         for status_item in out_of_sync:
             recorded = status_item.recorded_hash or "<NONE>"
+            extent_str = f"{status_item.extent.start}-{status_item.extent.end}"
             table.add_row(
                 status_item.kind,
                 status_item.path,
-                status_item.extent,
+                extent_str,
                 recorded,
                 status_item.calculated_hash
             )

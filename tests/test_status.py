@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from athena.status import check_status, check_status_recursive, filter_out_of_sync
-from athena.models import EntityStatus
+from athena.models import EntityStatus, Location
 
 
 class TestCheckStatus:
@@ -165,14 +165,14 @@ class TestFilterOutOfSync:
             EntityStatus(
                 kind="function",
                 path="test.py:foo",
-                extent="0-1",
+                extent=Location(start=0, end=1),
                 recorded_hash=None,
                 calculated_hash="abc123def456"
             ),
             EntityStatus(
                 kind="function",
                 path="test.py:bar",
-                extent="3-4",
+                extent=Location(start=3, end=4),
                 recorded_hash="abc123def456",
                 calculated_hash="abc123def456"
             )
@@ -189,14 +189,14 @@ class TestFilterOutOfSync:
             EntityStatus(
                 kind="function",
                 path="test.py:foo",
-                extent="0-1",
+                extent=Location(start=0, end=1),
                 recorded_hash="oldoldoldold",
                 calculated_hash="newnewnewnew"
             ),
             EntityStatus(
                 kind="function",
                 path="test.py:bar",
-                extent="3-4",
+                extent=Location(start=3, end=4),
                 recorded_hash="abc123def456",
                 calculated_hash="abc123def456"
             )
@@ -213,14 +213,14 @@ class TestFilterOutOfSync:
             EntityStatus(
                 kind="function",
                 path="test.py:foo",
-                extent="0-1",
+                extent=Location(start=0, end=1),
                 recorded_hash="abc123def456",
                 calculated_hash="abc123def456"
             ),
             EntityStatus(
                 kind="function",
                 path="test.py:bar",
-                extent="3-4",
+                extent=Location(start=3, end=4),
                 recorded_hash="xyz789xyz789",
                 calculated_hash="xyz789xyz789"
             )
@@ -236,14 +236,14 @@ class TestFilterOutOfSync:
             EntityStatus(
                 kind="function",
                 path="test.py:foo",
-                extent="0-1",
+                extent=Location(start=0, end=1),
                 recorded_hash=None,
                 calculated_hash="abc123def456"
             ),
             EntityStatus(
                 kind="function",
                 path="test.py:bar",
-                extent="3-4",
+                extent=Location(start=3, end=4),
                 recorded_hash="oldoldoldold",
                 calculated_hash="newnewnewnew"
             )
