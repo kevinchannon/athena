@@ -4,6 +4,25 @@ import hashlib
 import re
 
 
+def _is_first_child_of_parent(node, parent_node) -> bool:
+    """Check if a node is the first child of its parent.
+
+    Args:
+        node: The node to check
+        parent_node: The parent node
+
+    Returns:
+        True if this is the first child of the parent
+    """
+    if parent_node is None:
+        return False
+
+    if parent_node.type not in ("block", "module"):
+        return False
+
+    return parent_node.children and parent_node.children[0] == node
+
+
 def _is_docstring_node(node, parent_node) -> bool:
     """Check if a node is a docstring (first statement in body that's a string).
 
@@ -14,23 +33,15 @@ def _is_docstring_node(node, parent_node) -> bool:
     Returns:
         True if this is a docstring node
     """
-    # Docstrings are expression_statements containing a string
     if node.type != "expression_statement":
         return False
 
-    # Must be the first child of a block (function/class body) or module
-    if parent_node is None:
+    if not _is_first_child_of_parent(node, parent_node):
         return False
 
-    if parent_node.type not in ("block", "module"):
-        return False
-
-    # Check if this is the first child of the parent
-    if parent_node.children and parent_node.children[0] == node:
-        # Check if it contains a string
-        for child in node.children:
-            if child.type == "string":
-                return True
+    for child in node.children:
+        if child.type == "string":
+            return True
 
     return False
 
@@ -135,12 +146,10 @@ def compute_module_hash(source_code: str) -> str:
     import tree_sitter_python
     from tree_sitter import Language, Parser
 
-    # Parse the source code into an AST
     language = Language(tree_sitter_python.language())
     parser = Parser(language)
     tree = parser.parse(bytes(source_code, "utf8"))
 
-    # Serialize the entire module AST (excluding docstrings)
     serialization = serialize_ast_node(tree.root_node, source_code)
 
     return compute_hash(serialization)
