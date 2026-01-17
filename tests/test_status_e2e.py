@@ -285,17 +285,36 @@ def bar():
             repo_root = Path(tmpdir)
             (repo_root / ".git").mkdir()
             test_file = repo_root / "test.py"
+
+            # Create initial functions
             test_file.write_text(
                 '''def foo():
     return 1
 
 def bar():
-    """Docstring.
-    @athena: oldoldoldold
-    """
     return 2
 '''
             )
+
+            # Sync bar to add hash tag
+            subprocess.run(
+                ["uv", "run", "-m", "athena", "sync", "test.py:bar"],
+                cwd=repo_root,
+                capture_output=True,
+            )
+
+            # Read the synced file to get the hash
+            synced_content = test_file.read_text()
+
+            # Modify bar to make it out of sync (add a line before return)
+            import re
+            modified_content = re.sub(
+                r'(def bar\(\):.*?""".*?""")\s+(return 2)',
+                r'\1\n    x = 1  # Added line to change hash\n    \2',
+                synced_content,
+                flags=re.DOTALL
+            )
+            test_file.write_text(modified_content)
 
             result = subprocess.run(
                 ["uv", "run", "-m", "athena", "status", "--json"],
@@ -303,12 +322,6 @@ def bar():
                 capture_output=True,
                 text=True
             )
-
-            # Debug output
-            print(f"\n=== Test file content ===\n{test_file.read_text()}")
-            print(f"\n=== Status output ===\n{result.stdout}")
-            if result.stderr:
-                print(f"\n=== Status stderr ===\n{result.stderr}")
 
             assert result.returncode == 0
             data = json.loads(result.stdout)
@@ -333,10 +346,11 @@ def bar():
             foo_item = next(item for item in data if item["path"] == "test.py:foo")
             assert foo_item["recorded_hash"] is None
 
-            # Check that bar has the old hash
+            # Check that bar has a recorded_hash (from sync) but different calculated_hash (from modification)
             bar_item = next(item for item in data if item["path"] == "test.py:bar")
-            print(f"\n=== bar_item ===\n{bar_item}")
-            assert bar_item["recorded_hash"] == "oldoldoldold"
+            assert bar_item["recorded_hash"] is not None  # Has a hash from sync
+            assert bar_item["calculated_hash"] is not None
+            assert bar_item["recorded_hash"] != bar_item["calculated_hash"]  # Different because we modified it
 
     def test_status_json_all_in_sync(self):
         """Test status --json when all entities are in sync."""
