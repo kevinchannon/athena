@@ -48,8 +48,16 @@ def update_docstring_in_source(
     entity_indent = " " * indent
 
     # Determine the body start (line after def/class declaration)
-    # Look for the colon at the end of the definition line
+    # For multi-line signatures, we need to find the line with the closing colon
+    # Search forward from def_line_idx to find a line ending with ':'
     body_start_idx = def_line_idx + 1
+    for i in range(def_line_idx, min(entity_location.end + 1, len(lines))):
+        line = lines[i]
+        # Check if line ends with ':' (ignoring trailing whitespace and comments)
+        stripped = line.rstrip()
+        if stripped.endswith(':'):
+            body_start_idx = i + 1
+            break
 
     # Check if there's already a docstring
     # A docstring is the first non-empty statement in the body

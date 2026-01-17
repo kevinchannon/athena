@@ -462,6 +462,210 @@ def foo():
                 inspect_entity("test.py:bar", repo_root)
 
 
+class TestMultiLineSignatures:
+    """Tests for correct handling of multi-line signatures and class definitions."""
+
+    def test_sync_function_with_multiline_signature(self):
+        """Test that sync correctly handles functions with multi-line signatures."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """def my_function(
+    arg1: str,
+    arg2: int
+) -> str:
+    return "hello"
+"""
+            )
+
+            # Sync the function
+            result = sync_entity("test.py:my_function", force=False, repo_root=repo_root)
+            assert result is True
+
+            # Read the updated code
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+
+            # Find the closing paren with colon
+            colon_idx = None
+            for i, line in enumerate(lines):
+                if ") -> str:" in line:
+                    colon_idx = i
+                    break
+
+            assert colon_idx is not None, "Could not find end of signature"
+
+            # Docstring should be on the line AFTER the closing paren
+            assert lines[colon_idx + 1].strip().startswith('"""'), \
+                f"Expected docstring after line {colon_idx}, but found: {lines[colon_idx + 1]}"
+            assert "@athena:" in updated_code
+
+    def test_sync_function_with_multiline_signature_and_decorator(self):
+        """Test multi-line signature with decorator."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@decorator
+def my_function(
+    arg1: str,
+    arg2: int
+) -> str:
+    return "hello"
+"""
+            )
+
+            result = sync_entity("test.py:my_function", force=False, repo_root=repo_root)
+            assert result is True
+
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+
+            # Find decorator, signature end, and docstring
+            assert lines[0] == "@decorator"
+            colon_idx = None
+            for i, line in enumerate(lines):
+                if ") -> str:" in line:
+                    colon_idx = i
+                    break
+
+            assert colon_idx is not None
+            assert lines[colon_idx + 1].strip().startswith('"""'), \
+                f"Expected docstring after signature at line {colon_idx + 1}"
+
+    def test_sync_class_with_multiline_bases(self):
+        """Test class with multiple base classes on separate lines."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """class MyClass(
+    BaseClass1,
+    BaseClass2,
+    BaseClass3
+):
+    pass
+"""
+            )
+
+            result = sync_entity("test.py:MyClass", force=False, repo_root=repo_root)
+            assert result is True
+
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+
+            # Find the closing paren with colon
+            colon_idx = None
+            for i, line in enumerate(lines):
+                if "):" in line and "BaseClass" not in line:
+                    colon_idx = i
+                    break
+
+            assert colon_idx is not None
+            assert lines[colon_idx + 1].strip().startswith('"""'), \
+                f"Expected docstring after class definition at line {colon_idx + 1}"
+
+    def test_sync_class_with_multiline_bases_and_decorator(self):
+        """Test decorated class with multi-line base classes."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """@dataclass
+class MyClass(
+    BaseClass1,
+    BaseClass2
+):
+    x: int = 1
+"""
+            )
+
+            result = sync_entity("test.py:MyClass", force=False, repo_root=repo_root)
+            assert result is True
+
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+
+            assert lines[0] == "@dataclass"
+            colon_idx = None
+            for i, line in enumerate(lines):
+                if "):" in line and "BaseClass" not in line:
+                    colon_idx = i
+                    break
+
+            assert colon_idx is not None
+            assert lines[colon_idx + 1].strip().startswith('"""')
+
+    def test_sync_method_with_multiline_signature(self):
+        """Test method with multi-line signature."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """class MyClass:
+    def my_method(
+        self,
+        arg1: str,
+        arg2: int
+    ) -> str:
+        return "hello"
+"""
+            )
+
+            result = sync_entity("test.py:MyClass.my_method", force=False, repo_root=repo_root)
+            assert result is True
+
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+
+            colon_idx = None
+            for i, line in enumerate(lines):
+                if ") -> str:" in line:
+                    colon_idx = i
+                    break
+
+            assert colon_idx is not None
+            assert lines[colon_idx + 1].strip().startswith('"""')
+
+    def test_sync_function_with_complex_signature(self):
+        """Test function with very complex multi-line signature."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """def complex_func(
+    x: int,
+    y: str = "default",
+    *args,
+    z: bool = False,
+    **kwargs
+) -> tuple[int, str]:
+    return (x, y)
+"""
+            )
+
+            result = sync_entity("test.py:complex_func", force=False, repo_root=repo_root)
+            assert result is True
+
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+
+            colon_idx = None
+            for i, line in enumerate(lines):
+                if ") -> tuple[int, str]:" in line:
+                    colon_idx = i
+                    break
+
+            assert colon_idx is not None
+            assert lines[colon_idx + 1].strip().startswith('"""'), \
+                f"Expected docstring after signature at line {colon_idx + 1}"
+            # Verify signature is preserved
+            assert "x: int" in updated_code
+            assert "*args" in updated_code
+            assert "**kwargs" in updated_code
+
+
 class TestDecoratorHandling:
     """Tests for correct handling of decorators in sync and status commands."""
 
