@@ -63,6 +63,35 @@ async def list_tools() -> list[Tool]:
                 "required": ["location"],
             },
         ),
+        Tool(
+            name="ack_status",
+            description=(
+                "Check docstring hash synchronization status for entities. "
+                "Shows which entities have out-of-sync @athena hash tags. "
+                "An entity is out-of-sync if it has no hash tag or if the tag "
+                "doesn't match the current code structure. Returns JSON array of "
+                "entities that need updating."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "entity": {
+                        "type": "string",
+                        "description": (
+                            "Entity to check status for. Use '.' for entire project, "
+                            "'file_path' for module, 'file_path:entity_name' for specific entity. "
+                            "Examples: '.', 'src/auth.py', 'src/auth.py:MyClass'"
+                        ),
+                    },
+                    "recursive": {
+                        "type": "boolean",
+                        "description": "Check entity and all sub-entities recursively (default: false)",
+                        "default": False,
+                    },
+                },
+                "required": ["entity"],
+            },
+        ),
     ]
 
 
@@ -73,6 +102,11 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         return await _handle_locate(arguments["entity"])
     elif name == "ack_info":
         return await _handle_info(arguments["location"])
+    elif name == "ack_status":
+        return await _handle_status(
+            arguments["entity"],
+            arguments.get("recursive", False)
+        )
 
     raise ValueError(f"Unknown tool: {name}")
 
@@ -185,6 +219,66 @@ async def _handle_info(location: str) -> list[TextContent]:
             TextContent(
                 type="text",
                 text=f"Error running ack info: {error_msg}",
+            )
+        ]
+    except json.JSONDecodeError as e:
+        return [
+            TextContent(
+                type="text",
+                text=f"Error parsing ack output: {e}",
+            )
+        ]
+    except Exception as e:
+        return [
+            TextContent(
+                type="text",
+                text=f"Unexpected error: {e}",
+            )
+        ]
+
+
+async def _handle_status(entity: str, recursive: bool) -> list[TextContent]:
+    """Handle ack_status tool calls.
+
+    Args:
+        entity: Entity to check status for
+        recursive: Whether to check recursively
+
+    Returns:
+        List containing a single TextContent with JSON results
+    """
+    try:
+        # Build command with flags
+        cmd = ["athena", "status", "--json"]
+        if recursive:
+            cmd.append("--recursive")
+        cmd.append(entity)
+
+        # Call the CLI tool
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        # Parse JSON output from CLI
+        status_data = json.loads(result.stdout)
+
+        # Return formatted JSON
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(status_data, indent=2),
+            )
+        ]
+
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.strip() if e.stderr else str(e)
+        return [
+            TextContent(
+                type="text",
+                text=f"Error running ack status: {error_msg}",
             )
         ]
     except json.JSONDecodeError as e:
