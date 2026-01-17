@@ -250,12 +250,8 @@ def inspect_entity(entity_path_str: str, repo_root: Path) -> EntityStatus:
 def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
     """Sync hash tag for a single entity.
 
-    This function:
-    1. Parses the entity path
-    2. Resolves it to a file
-    3. Computes the current hash from AST
-    4. Checks if update is needed
-    5. Updates the docstring with new hash if needed
+    Uses inspect_entity() to analyze the entity state, then updates the
+    docstring if needed.
 
     Args:
         entity_path_str: Entity path string (e.g., "src/foo.py:Bar")
@@ -268,53 +264,25 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
     Raises:
         FileNotFoundError: If entity file doesn't exist
         ValueError: If entity is not found in file or path is invalid
+        NotImplementedError: For package/module level sync
     """
-    # Parse the entity path
+    status = inspect_entity(entity_path_str, repo_root)
+
+    if not needs_update(status.recorded_hash, status.calculated_hash, force):
+        return False
+
     entity_path = parse_entity_path(entity_path_str)
-
-    # Resolve to actual file
     resolved_path = resolve_entity_path(entity_path, repo_root)
-    if resolved_path is None or not resolved_path.exists():
-        raise FileNotFoundError(f"Entity file not found: {entity_path.file_path}")
-
-    # Check if path should be excluded
-    if should_exclude_path(resolved_path, repo_root):
-        raise ValueError(f"Cannot sync excluded path: {entity_path.file_path}")
-
-    # For package-level sync, we would need to implement package hash logic
-    # For now, focus on module and entity-level sync
-    if entity_path.is_package:
-        raise NotImplementedError(
-            "Package-level sync not yet implemented. "
-            "Use module or entity-level sync instead."
-        )
-
-    # Read the source code
     source_code = resolved_path.read_text()
 
-    # Initialize parser
     parser = PythonParser()
-
-    # Parse the file to get AST
     tree = parser.parser.parse(bytes(source_code, "utf8"))
     root_node = tree.root_node
 
-    # Handle module-level sync
-    if entity_path.is_module:
-        # Module-level: extract module docstring and update it
-        # For now, we'll focus on entity-level sync
-        raise NotImplementedError(
-            "Module-level sync not yet implemented. "
-            "Use entity-level sync instead (e.g., file.py:function_name)."
-        )
-
-    # Find the entity in the AST
     entity_node = None
     entity_extent_node = None
 
-    # Search for the entity
     for child in root_node.children:
-        # Check functions
         if child.type == "function_definition":
             name_node = child.child_by_field_name("name")
             if name_node:
@@ -326,7 +294,6 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
                     entity_extent_node = child
                     break
 
-        # Check decorated definitions
         elif child.type == "decorated_definition":
             for subchild in child.children:
                 if subchild.type == "function_definition":
@@ -350,7 +317,6 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
                             entity_extent_node = child
                             break
 
-        # Check classes
         elif child.type == "class_definition":
             name_node = child.child_by_field_name("name")
             if name_node:
@@ -362,7 +328,6 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
                     entity_extent_node = child
                     break
 
-                # Also check methods inside this class if entity is a method
                 if entity_path.is_method and name == entity_path.class_name:
                     body = child.child_by_field_name("body")
                     if body:
@@ -395,46 +360,20 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
                                         entity_extent_node = method_extent_node
                                         break
 
-    if entity_node is None:
-        raise ValueError(f"Entity not found in file: {entity_path.entity_name}")
-
-    # Compute hash based on entity type
-    if entity_node.type == "function_definition":
-        computed_hash = compute_function_hash(entity_node, source_code)
-    elif entity_node.type == "class_definition":
-        computed_hash = compute_class_hash(entity_node, source_code)
-    else:
-        raise ValueError(f"Unsupported entity type: {entity_node.type}")
-
-    # Extract current docstring and parse existing tag
     current_docstring = parser._extract_docstring(entity_node, source_code)
-    # Strip leading/trailing whitespace from docstring to ensure consistent formatting
     if current_docstring:
         current_docstring = current_docstring.strip()
-    current_hash = (
-        parser.parse_athena_tag(current_docstring) if current_docstring else None
-    )
 
-    # Check if update is needed
-    if not needs_update(current_hash, computed_hash, force):
-        return False
-
-    # Update docstring with new hash
-    updated_docstring = parser.update_athena_tag(current_docstring, computed_hash)
-
-    # Determine entity location for docstring replacement
-    from athena.models import Location
+    updated_docstring = parser.update_athena_tag(current_docstring, status.calculated_hash)
 
     entity_location = Location(
         start=entity_extent_node.start_point[0], end=entity_extent_node.end_point[0]
     )
 
-    # Update source code
     updated_source = update_docstring_in_source(
         source_code, entity_location, updated_docstring
     )
 
-    # Write back to file
     resolved_path.write_text(updated_source)
 
     return True
