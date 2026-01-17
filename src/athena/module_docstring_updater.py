@@ -7,6 +7,9 @@ import re
 def detect_file_header(source_code: str) -> tuple[str | None, str | None, int]:
     """Detect shebang and encoding declaration at the start of a file.
 
+    Per PEP 263, encoding can be on line 1 or 2 (if shebang is present).
+    Uses pattern: coding[:=]\s*([-\w.]+)
+
     Args:
         source_code: Python source code to analyze
 
@@ -24,14 +27,10 @@ def detect_file_header(source_code: str) -> tuple[str | None, str | None, int]:
     encoding_line = None
     current_line_idx = 0
 
-    # Check for shebang (must be first line)
     if lines and lines[0].startswith("#!"):
         shebang_line = lines[0]
         current_line_idx = 1
 
-    # Check for encoding declaration (PEP 263)
-    # Can be on line 1 or 2 (if shebang is present)
-    # Pattern: coding[:=]\s*([-\w.]+)
     encoding_pattern = re.compile(rb"coding[:=]\s*([-\w.]+)")
 
     if current_line_idx < len(lines):
@@ -63,6 +62,60 @@ def extract_module_docstring(source_code: str) -> str | None:
         return None
 
 
+def _split_header_and_body(
+    lines: list[str], header_end_idx: int
+) -> tuple[list[str], list[str]]:
+    """Split source lines into header and body sections."""
+    header_lines = lines[:header_end_idx]
+    body_lines = lines[header_end_idx:]
+    return header_lines, body_lines
+
+
+def _find_existing_docstring_end(body_lines: list[str]) -> int | None:
+    """Find the end line index of existing module docstring in body.
+
+    Returns:
+        Line index where docstring ends (1-indexed), or None if no docstring
+    """
+    body_source = "".join(body_lines)
+    if not body_source.strip():
+        return None
+
+    try:
+        tree = ast.parse(body_source)
+        if ast.get_docstring(tree) is not None:
+            if tree.body and isinstance(tree.body[0], ast.Expr):
+                return tree.body[0].end_lineno
+    except SyntaxError:
+        pass
+
+    return None
+
+
+def _format_docstring(docstring: str) -> str:
+    """Format docstring with triple quotes and newlines."""
+    return f'"""\n{docstring}\n"""\n'
+
+
+def _reconstruct_file(
+    header_lines: list[str],
+    formatted_docstring: str,
+    body_lines: list[str],
+    docstring_end_idx: int | None,
+) -> str:
+    """Reconstruct file from header, new docstring, and body without old docstring."""
+    result_lines = []
+    result_lines.extend(header_lines)
+    result_lines.append(formatted_docstring)
+
+    if docstring_end_idx is not None:
+        result_lines.extend(body_lines[docstring_end_idx:])
+    else:
+        result_lines.extend(body_lines)
+
+    return "".join(result_lines)
+
+
 def update_module_docstring(source_code: str, new_docstring: str) -> str:
     """Update or insert module-level docstring, preserving file headers.
 
@@ -73,61 +126,11 @@ def update_module_docstring(source_code: str, new_docstring: str) -> str:
     Returns:
         Updated source code with new docstring and preserved headers
     """
-    # Detect file headers
     shebang_line, encoding_line, header_end_idx = detect_file_header(source_code)
-
     lines = source_code.splitlines(keepends=True)
 
-    # Extract the header (shebang + encoding)
-    header_lines = lines[:header_end_idx]
+    header_lines, body_lines = _split_header_and_body(lines, header_end_idx)
+    docstring_end_idx = _find_existing_docstring_end(body_lines)
+    formatted_docstring = _format_docstring(new_docstring)
 
-    # Extract everything after the header
-    body_lines = lines[header_end_idx:]
-
-    # Find and remove existing module docstring
-    # Parse the body to detect if there's a docstring
-    body_source = "".join(body_lines)
-
-    # Check if there's an existing docstring
-    existing_docstring = None
-    docstring_end_line_idx = None
-
-    if body_source.strip():
-        try:
-            tree = ast.parse(body_source)
-            existing_docstring = ast.get_docstring(tree)
-
-            if existing_docstring is not None:
-                # Find where the docstring ends in the body
-                # The docstring is the first statement
-                if tree.body and isinstance(tree.body[0], ast.Expr):
-                    # Get the end line of the first expression (0-indexed within body)
-                    docstring_node = tree.body[0]
-                    # ast line numbers are 1-indexed
-                    docstring_end_line_idx = docstring_node.end_lineno
-        except SyntaxError:
-            # If we can't parse, we'll just prepend the docstring
-            pass
-
-    # Build the new module docstring with proper formatting
-    formatted_docstring = f'"""\n{new_docstring}\n"""\n'
-
-    # Reconstruct the file
-    result_lines = []
-
-    # Add header
-    result_lines.extend(header_lines)
-
-    # Add new docstring
-    result_lines.append(formatted_docstring)
-
-    # Add the rest of the body (excluding old docstring if present)
-    if docstring_end_line_idx is not None:
-        # Skip lines that were part of the old docstring
-        # docstring_end_line_idx is 1-indexed and represents the last line of the docstring
-        result_lines.extend(body_lines[docstring_end_line_idx:])
-    else:
-        # No existing docstring, add all body lines
-        result_lines.extend(body_lines)
-
-    return "".join(result_lines)
+    return _reconstruct_file(header_lines, formatted_docstring, body_lines, docstring_end_idx)

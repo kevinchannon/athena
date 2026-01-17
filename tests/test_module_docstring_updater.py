@@ -123,7 +123,7 @@ import sys
         source = "'''\nModule docstring.\n'''\nimport sys\n"
         docstring = extract_module_docstring(source)
 
-        assert docstring == "\nModule docstring.\n"
+        assert docstring == "Module docstring."
 
     def test_extract_invalid_syntax(self):
         """Test with invalid Python syntax."""
