@@ -235,6 +235,7 @@ def sync(
 def status(
     entity: Optional[str] = typer.Argument(None, help="Entity to check status for"),
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Check entity and all sub-entities"),
+    json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
 ):
     """Check docstring hash synchronization status.
 

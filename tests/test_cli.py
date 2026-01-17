@@ -373,3 +373,11 @@ def test_sync_command_with_force_flag(tmp_path):
     assert "Updated 1 entity" in result.stdout
 
 
+def test_status_command_accepts_json_flag():
+    """Test that status command accepts --json flag."""
+    result = runner.invoke(app, ["status", "--help"])
+
+    assert result.exit_code == 0
+    assert "--json" in result.stdout or "-j" in result.stdout
+
+
