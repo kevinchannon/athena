@@ -1,5 +1,6 @@
 """End-to-end tests for status command."""
 
+import json
 import subprocess
 import tempfile
 from pathlib import Path
@@ -277,3 +278,183 @@ def bar():
             # Count occurrences - should only appear once in the table
             foo_count = sum(1 for line in lines if "test.py:foo" in line)
             assert foo_count == 0  # foo is in sync, should not be in output
+
+    def test_status_json_out_of_sync(self):
+        """Test status --json with out-of-sync entities."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """def foo():
+    return 1
+
+def bar():
+    '''Docstring.
+    @athena: oldoldoldold
+    '''
+    return 2
+"""
+            )
+
+            result = subprocess.run(
+                ["uv", "run", "-m", "athena", "status", "--json"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True
+            )
+
+            assert result.returncode == 0
+            data = json.loads(result.stdout)
+            assert isinstance(data, list)
+            assert len(data) == 2  # Both foo and bar are out of sync
+
+            # Verify extent is an object with start/end
+            for item in data:
+                assert "extent" in item
+                assert isinstance(item["extent"], dict)
+                assert "start" in item["extent"]
+                assert "end" in item["extent"]
+                assert isinstance(item["extent"]["start"], int)
+                assert isinstance(item["extent"]["end"], int)
+
+            # Check specific entities
+            paths = [item["path"] for item in data]
+            assert "test.py:foo" in paths
+            assert "test.py:bar" in paths
+
+            # Check that foo has null recorded_hash
+            foo_item = next(item for item in data if item["path"] == "test.py:foo")
+            assert foo_item["recorded_hash"] is None
+
+            # Check that bar has the old hash
+            bar_item = next(item for item in data if item["path"] == "test.py:bar")
+            assert bar_item["recorded_hash"] == "oldoldoldold"
+
+    def test_status_json_all_in_sync(self):
+        """Test status --json when all entities are in sync."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """def foo():
+    return 1
+"""
+            )
+
+            # Sync the function
+            subprocess.run(
+                ["uv", "run", "-m", "athena", "sync", "test.py:foo"],
+                cwd=repo_root,
+                capture_output=True
+            )
+
+            # Check status with JSON
+            result = subprocess.run(
+                ["uv", "run", "-m", "athena", "status", "--json"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True
+            )
+
+            assert result.returncode == 0
+            data = json.loads(result.stdout)
+            assert data == []  # Empty array when all in sync
+
+    def test_status_json_short_flag(self):
+        """Test status -j (short flag)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """def foo():
+    return 1
+"""
+            )
+
+            result = subprocess.run(
+                ["uv", "run", "-m", "athena", "status", "-j"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True
+            )
+
+            assert result.returncode == 0
+            data = json.loads(result.stdout)
+            assert isinstance(data, list)
+
+    def test_status_json_recursive(self):
+        """Test status --json --recursive."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """def foo():
+    return 1
+
+class MyClass:
+    def method(self):
+        return 2
+"""
+            )
+
+            result = subprocess.run(
+                ["uv", "run", "-m", "athena", "status", "--json", "--recursive"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True
+            )
+
+            assert result.returncode == 0
+            data = json.loads(result.stdout)
+            assert isinstance(data, list)
+            assert len(data) == 3  # foo, MyClass, MyClass.method
+
+            # All items should have extent objects
+            for item in data:
+                assert isinstance(item["extent"], dict)
+                assert "start" in item["extent"]
+                assert "end" in item["extent"]
+
+    def test_status_json_extent_format_matches_locate(self):
+        """Test that status --json extent format matches locate --json."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                """def foo():
+    return 1
+"""
+            )
+
+            # Get extent from status --json
+            status_result = subprocess.run(
+                ["uv", "run", "-m", "athena", "status", "--json"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True
+            )
+            status_data = json.loads(status_result.stdout)
+            status_extent = status_data[0]["extent"]
+
+            # Get extent from locate --json
+            locate_result = subprocess.run(
+                ["uv", "run", "-m", "athena", "locate", "--json", "foo"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True
+            )
+            locate_data = json.loads(locate_result.stdout)
+            locate_extent = locate_data[0]["extent"]
+
+            # Both should have the same structure
+            assert isinstance(status_extent, dict)
+            assert isinstance(locate_extent, dict)
+            assert "start" in status_extent and "end" in status_extent
+            assert "start" in locate_extent and "end" in locate_extent
+            # And the same values (for the same entity)
+            assert status_extent == locate_extent
