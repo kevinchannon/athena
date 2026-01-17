@@ -9,7 +9,7 @@ def _is_docstring_node(node, parent_node) -> bool:
 
     Args:
         node: The node to check
-        parent_node: The parent node (should be a block)
+        parent_node: The parent node (should be a block or module)
 
     Returns:
         True if this is a docstring node
@@ -18,11 +18,14 @@ def _is_docstring_node(node, parent_node) -> bool:
     if node.type != "expression_statement":
         return False
 
-    # Must be the first child of a block (body)
-    if parent_node is None or parent_node.type != "block":
+    # Must be the first child of a block (function/class body) or module
+    if parent_node is None:
         return False
 
-    # Check if this is the first child of the block
+    if parent_node.type not in ("block", "module"):
+        return False
+
+    # Check if this is the first child of the parent
     if parent_node.children and parent_node.children[0] == node:
         # Check if it contains a string
         for child in node.children:
@@ -116,24 +119,31 @@ def compute_class_hash(node, source_code: str) -> str:
     return compute_hash(serialization)
 
 
-def compute_module_hash(entities_docstrings: list[str]) -> str:
-    """Compute hash for a module based on non-whitespace from entity docstrings.
+def compute_module_hash(source_code: str) -> str:
+    """Compute hash for a module based on complete file AST.
+
+    The hash is calculated from the full AST representation of the module,
+    excluding docstrings. This captures all semantically significant content
+    including module-level code, imports, and function/class definitions.
 
     Args:
-        entities_docstrings: List of docstring contents from module entities
+        source_code: Complete source code of the module
 
     Returns:
         12-character hex hash
     """
-    # Concatenate all docstrings with non-whitespace characters only
-    combined = ""
-    for docstring in entities_docstrings:
-        if docstring:
-            # Remove all whitespace
-            no_whitespace = re.sub(r"\s+", "", docstring)
-            combined += no_whitespace
+    import tree_sitter_python
+    from tree_sitter import Language, Parser
 
-    return compute_hash(combined)
+    # Parse the source code into an AST
+    language = Language(tree_sitter_python.language())
+    parser = Parser(language)
+    tree = parser.parse(bytes(source_code, "utf8"))
+
+    # Serialize the entire module AST (excluding docstrings)
+    serialization = serialize_ast_node(tree.root_node, source_code)
+
+    return compute_hash(serialization)
 
 
 def compute_package_hash(module_docstrings: list[str]) -> str:
