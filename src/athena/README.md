@@ -26,7 +26,63 @@ Requires at least Python 3.12, so if that's not installed you should do that wit
 pipx install --python python3.12 athena-code
 ```
 
-### Install Claude MCP integrations
+## Usage
+use `athena --help` to see up-to-date information about the available features:
+
+```
+╭─ Commands ─────────────────────────────────────────────────────────────────────╮
+│ locate          Locate entities (functions, classes, methods) by name.         │
+│ info            Get detailed information about a code entity or package.       │
+│ mcp-server      Start the MCP server for Claude Code integration.              │
+│ install-mcp     Install MCP server configuration for Claude Code.              │
+│ sync            Update @athena hash tags in docstrings.                        │
+│ status          Check docstring hash synchronization status.                   │
+│ uninstall-mcp   Remove MCP server configuration from Claude Code.              │
+╰────────────────────────────────────────────────────────────────────────────────╯
+```
+
+Generally, you will install `athena` and then:
+- Run `athena sync` in your codebase. This will add Athena's hashes to all the docstrings and allow `athena` to detect code changes that have invalidated the docstrings.
+- After code changes, run `athena status` to see a table of all the functions that have been updated and may have had their docstrings invalidated.
+- Update the necessary docstrings and then run `athena sync` again to update all the necessary hashes.
+
+If you want to find an entity in the codebase, then just run `athena locate <entity>` to get details on the file and lines the entity occupies:
+```bash
+> athena locate get_task
+ Kind    Path                    Extent  
+ method  src/tasktree/parser.py  277-286
+```
+
+Once you know where a thing is, then you can ask for info about it:
+```bash
+> athena info src/tasktree/parser.py:get_task
+{
+  "method": {
+    "name": "Recipe.get_task",
+    "path": "src/tasktree/parser.py",
+    "extent": {
+      "start": 277,
+      "end": 286
+    },
+    "sig": {
+      "name": "get_task",
+      "args": [
+        {
+          "name": "self"
+        },
+        {
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "return_type": "Task | None"
+    },
+    "summary": "Get task by name.\n\n        Args:\n            name: Task name (may be namespaced like 'build.compile')\n\n        Returns:\n            Task if found, None otherwise\n        "
+  }
+}
+```
+
+## Install Claude MCP integrations
 
 Athena includes Model Context Protocol (MCP) integration, exposing code navigation capabilities as first-class tools in Claude Code.
 
