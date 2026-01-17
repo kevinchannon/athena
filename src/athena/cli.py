@@ -234,6 +234,7 @@ def sync(
 @app.command()
 def status(
     entity: Optional[str] = typer.Argument(None, help="Entity to check status for"),
+    recursive: bool = typer.Option(False, "--recursive", "-r", help="Check entity and all sub-entities"),
 ):
     """Check docstring hash synchronization status.
 
@@ -244,11 +245,11 @@ def status(
     If no entity is specified, checks the entire project.
 
     Examples:
-        athena status                                  # Check entire project
         athena status src/module.py:MyClass            # Check specific class
-        athena status src/module.py:MyClass.method     # Check specific method
+        athena status src/module.py:MyClass -r         # Check class and methods
+        athena status src/module.py --recursive        # Check all entities in module
     """
-    from athena.status import check_status, filter_out_of_sync
+    from athena.status import check_status, check_status_recursive, filter_out_of_sync
     from rich.table import Table
 
     try:
@@ -262,7 +263,10 @@ def status(
         raise typer.Exit(code=1)
 
     try:
-        statuses = check_status(entity, repo_root)
+        if recursive:
+            statuses = check_status_recursive(entity, repo_root)
+        else:
+            statuses = check_status(entity, repo_root)
         out_of_sync = filter_out_of_sync(statuses)
 
         if not out_of_sync:
