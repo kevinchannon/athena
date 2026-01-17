@@ -362,7 +362,8 @@ class TestInspectEntity:
 
             assert status.kind == "function"
             assert status.path == "test.py:foo"
-            assert status.extent == "0-1"
+            assert status.extent.start == 0
+            assert status.extent.end == 1
             assert status.recorded_hash is None
             assert len(status.calculated_hash) == 12
 
@@ -437,7 +438,7 @@ def foo():
 
             assert status.kind == "function"
             # Extent should include decorator
-            assert status.extent.startswith("0-")
+            assert status.extent.start == 0
 
     def test_inspect_nonexistent_file_raises_error(self):
         """Test that inspecting nonexistent file raises error."""
@@ -913,10 +914,8 @@ def foo():
             assert status is not None
             assert status.kind == "function"
             # Extent should include the decorator
-            # Format is "start-end" (e.g., "0-2")
-            start, end = map(int, status.extent.split("-"))
-            assert start == 0  # First line (decorator)
-            assert end == 2    # Last line (return statement)
+            assert status.extent.start == 0  # First line (decorator)
+            assert status.extent.end == 2    # Last line (return statement)
 
     def test_inspect_identifies_decorated_class(self):
         """Test that inspect_entity correctly identifies decorated classes."""
@@ -936,9 +935,7 @@ class MyClass:
             assert status is not None
             assert status.kind == "class"
             # Extent should include the decorator
-            # Format is "start-end" (e.g., "0-2")
-            start, _ = map(int, status.extent.split("-"))
-            assert start == 0  # First line (decorator)
+            assert status.extent.start == 0  # First line (decorator)
 
     def test_inspect_identifies_decorated_method(self):
         """Test that inspect_entity correctly identifies decorated methods."""
@@ -959,9 +956,7 @@ class MyClass:
             assert status is not None
             assert status.kind == "method"
             # Extent should include the decorator (relative to class)
-            # Format is "start-end" (e.g., "1-3")
-            start, _ = map(int, status.extent.split("-"))
-            assert start == 1  # @staticmethod line
+            assert status.extent.start == 1  # @staticmethod line
 
     def test_sync_decorated_function_preserves_decorator_arguments(self):
         """Test that decorators with arguments are preserved correctly."""

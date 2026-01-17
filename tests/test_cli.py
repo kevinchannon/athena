@@ -438,7 +438,7 @@ def test_render_status_json():
     assert data[1]["calculated_hash"] == "newnewnewnew"
 
 
-def test_status_json_with_out_of_sync_entities(tmp_path, monkeypatch):
+def test_status_json_with_out_of_sync_entities(tmp_path):
     """Test status --json with out-of-sync entities."""
     test_file = tmp_path / "test.py"
     test_file.write_text(
@@ -454,11 +454,14 @@ def bar():
     )
     (tmp_path / ".git").mkdir()
 
-    monkeypatch.chdir(tmp_path)
+    result = subprocess.run(
+        ["uv", "run", "-m", "athena", "status", "--json"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
 
-    result = runner.invoke(app, ["status", "--json"])
-
-    assert result.exit_code == 0
+    assert result.returncode == 0
     data = json.loads(result.stdout)
     assert isinstance(data, list)
     assert len(data) == 2  # Both foo and bar are out of sync
@@ -475,7 +478,7 @@ def bar():
         assert "calculated_hash" in item
 
 
-def test_status_json_all_in_sync(tmp_path, monkeypatch):
+def test_status_json_all_in_sync(tmp_path):
     """Test status --json when all entities are in sync."""
     test_file = tmp_path / "test.py"
     # First create a function and sync it
@@ -486,8 +489,6 @@ def test_status_json_all_in_sync(tmp_path, monkeypatch):
     )
     (tmp_path / ".git").mkdir()
 
-    monkeypatch.chdir(tmp_path)
-
     # Sync the function
     subprocess.run(
         ["uv", "run", "-m", "athena", "sync", "test.py:foo"],
@@ -497,14 +498,19 @@ def test_status_json_all_in_sync(tmp_path, monkeypatch):
     )
 
     # Now check status with --json
-    result = runner.invoke(app, ["status", "--json"])
+    result = subprocess.run(
+        ["uv", "run", "-m", "athena", "status", "--json"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
 
-    assert result.exit_code == 0
+    assert result.returncode == 0
     data = json.loads(result.stdout)
     assert data == []  # Empty list when all in sync
 
 
-def test_status_json_short_flag(tmp_path, monkeypatch):
+def test_status_json_short_flag(tmp_path):
     """Test status -j (short flag)."""
     test_file = tmp_path / "test.py"
     test_file.write_text(
@@ -514,16 +520,19 @@ def test_status_json_short_flag(tmp_path, monkeypatch):
     )
     (tmp_path / ".git").mkdir()
 
-    monkeypatch.chdir(tmp_path)
+    result = subprocess.run(
+        ["uv", "run", "-m", "athena", "status", "-j"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
 
-    result = runner.invoke(app, ["status", "-j"])
-
-    assert result.exit_code == 0
+    assert result.returncode == 0
     data = json.loads(result.stdout)
     assert isinstance(data, list)
 
 
-def test_status_json_recursive(tmp_path, monkeypatch):
+def test_status_json_recursive(tmp_path):
     """Test status --json --recursive."""
     test_file = tmp_path / "test.py"
     test_file.write_text(
@@ -537,11 +546,14 @@ class MyClass:
     )
     (tmp_path / ".git").mkdir()
 
-    monkeypatch.chdir(tmp_path)
+    result = subprocess.run(
+        ["uv", "run", "-m", "athena", "status", "--json", "--recursive"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
 
-    result = runner.invoke(app, ["status", "--json", "--recursive"])
-
-    assert result.exit_code == 0
+    assert result.returncode == 0
     data = json.loads(result.stdout)
     assert isinstance(data, list)
     assert len(data) == 3  # foo, MyClass, MyClass.method
