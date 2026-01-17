@@ -232,6 +232,77 @@ def sync(
 
 
 @app.command()
+def status(
+    entity: Optional[str] = typer.Argument(None, help="Entity to check status for"),
+):
+    """Check docstring hash synchronization status.
+
+    Displays which entities have out-of-sync @athena hash tags. An entity is
+    out-of-sync if it has no hash tag or if the tag doesn't match the current
+    code structure.
+
+    If no entity is specified, checks the entire project.
+
+    Examples:
+        athena status                                  # Check entire project
+        athena status src/module.py:MyClass            # Check specific class
+        athena status src/module.py:MyClass.method     # Check specific method
+    """
+    from athena.status import check_status, filter_out_of_sync
+    from rich.table import Table
+
+    try:
+        repo_root = find_repository_root()
+    except RepositoryNotFoundError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=255)
+
+    if entity is None:
+        typer.echo("Error: Must specify an entity", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        statuses = check_status(entity, repo_root)
+        out_of_sync = filter_out_of_sync(statuses)
+
+        if not out_of_sync:
+            typer.echo("All entities are in sync")
+            return
+
+        typer.echo(f"{len(out_of_sync)} entities need updating")
+        typer.echo()
+
+        table = Table(show_header=True, header_style="bold cyan", box=None)
+        table.add_column("Kind", style="green")
+        table.add_column("Path", style="blue")
+        table.add_column("Extent", style="yellow")
+        table.add_column("Recorded Hash", style="magenta")
+        table.add_column("Calc. Hash", style="magenta")
+
+        for status_item in out_of_sync:
+            recorded = status_item.recorded_hash or "<NONE>"
+            table.add_row(
+                status_item.kind,
+                status_item.path,
+                status_item.extent,
+                recorded,
+                status_item.calculated_hash
+            )
+
+        console.print(table)
+
+    except NotImplementedError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+    except (ValueError, FileNotFoundError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@app.command()
 def uninstall_mcp():
     """Remove MCP server configuration from Claude Code.
 
