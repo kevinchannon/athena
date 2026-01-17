@@ -446,8 +446,9 @@ def test_status_json_with_out_of_sync_entities(tmp_path):
     return 1
 
 def bar():
-    """Docstring.
-@athena: oldoldoldold
+    """
+    Docstring.
+    @athena: oldoldoldold
     """
     return 2
 '''

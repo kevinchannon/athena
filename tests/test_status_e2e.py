@@ -290,8 +290,9 @@ def bar():
     return 1
 
 def bar():
-    """Docstring.
-@athena: oldoldoldold
+    """
+    Docstring.
+    @athena: oldoldoldold
     """
     return 2
 '''
