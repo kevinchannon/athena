@@ -26,8 +26,9 @@ def should_exclude_path(path: Path, repo_root: Path) -> bool:
     Returns:
         True if path should be excluded, False otherwise
     """
-    # Convert to absolute path for comparison
+    # Convert to absolute paths for comparison (resolves symlinks)
     abs_path = path.resolve()
+    abs_repo_root = repo_root.resolve()
 
     # Exclude virtualenvs
     parts = abs_path.parts
@@ -48,7 +49,7 @@ def should_exclude_path(path: Path, repo_root: Path) -> bool:
 
     # Exclude athena package itself
     try:
-        rel_path = abs_path.relative_to(repo_root)
+        rel_path = abs_path.relative_to(abs_repo_root)
         rel_parts = rel_path.parts
         # Check for src/athena/ pattern
         if len(rel_parts) >= 2 and rel_parts[0] == 'src' and rel_parts[1] == 'athena':
@@ -57,10 +58,10 @@ def should_exclude_path(path: Path, repo_root: Path) -> bool:
         # We need to be careful not to exclude user files that happen to be in a directory called "athena"
         # Only exclude if it's actually the athena package with __init__.py
         if rel_parts and rel_parts[0] == 'athena':
-            potential_package = repo_root / 'athena'
+            potential_package = abs_repo_root / 'athena'
             if potential_package.is_dir() and (potential_package / '__init__.py').exists():
                 return True
-    except ValueError:
+    except ValueError as e:
         pass
 
     return False
