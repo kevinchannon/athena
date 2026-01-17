@@ -263,6 +263,22 @@ def _render_status_table(out_of_sync):
     console.print(table)
 
 
+def _render_status_json(out_of_sync):
+    """Render entity statuses as JSON.
+
+    Args:
+        out_of_sync: List of EntityStatus objects to render
+    """
+    results = []
+    for status_item in out_of_sync:
+        status_dict = asdict(status_item)
+        # Convert None to null in JSON (not the string "<NONE>")
+        # asdict already does this correctly
+        results.append(status_dict)
+
+    typer.echo(json_module.dumps(results, indent=2))
+
+
 @app.command()
 def status(
     entity: Optional[str] = typer.Argument(None, help="Entity to check status for"),

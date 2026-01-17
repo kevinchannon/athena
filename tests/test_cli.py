@@ -381,3 +381,60 @@ def test_status_command_accepts_json_flag():
     assert "--json" in result.stdout or "-j" in result.stdout
 
 
+def test_render_status_json():
+    """Test JSON rendering of EntityStatus objects."""
+    from athena.cli import _render_status_json
+    from athena.models import EntityStatus, Location
+    from io import StringIO
+    import sys
+
+    # Create mock EntityStatus objects
+    statuses = [
+        EntityStatus(
+            kind="function",
+            path="test.py:foo",
+            extent=Location(start=10, end=15),
+            recorded_hash=None,
+            calculated_hash="abc123def456"
+        ),
+        EntityStatus(
+            kind="method",
+            path="test.py:MyClass.bar",
+            extent=Location(start=20, end=25),
+            recorded_hash="oldoldoldold",
+            calculated_hash="newnewnewnew"
+        )
+    ]
+
+    # Capture output
+    captured_output = StringIO()
+    sys.stdout = captured_output
+
+    try:
+        _render_status_json(statuses)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = sys.__stdout__
+
+    # Verify JSON structure
+    data = json.loads(output)
+    assert isinstance(data, list)
+    assert len(data) == 2
+
+    # Check first entity
+    assert data[0]["kind"] == "function"
+    assert data[0]["path"] == "test.py:foo"
+    assert data[0]["extent"]["start"] == 10
+    assert data[0]["extent"]["end"] == 15
+    assert data[0]["recorded_hash"] is None  # null in JSON
+    assert data[0]["calculated_hash"] == "abc123def456"
+
+    # Check second entity
+    assert data[1]["kind"] == "method"
+    assert data[1]["path"] == "test.py:MyClass.bar"
+    assert data[1]["extent"]["start"] == 20
+    assert data[1]["extent"]["end"] == 25
+    assert data[1]["recorded_hash"] == "oldoldoldold"
+    assert data[1]["calculated_hash"] == "newnewnewnew"
+
+
