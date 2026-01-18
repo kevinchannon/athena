@@ -416,17 +416,6 @@ def foo():
             assert "@athena:" in updated_code
             assert '"""' in updated_code
 
-    def test_sync_package_level_not_implemented(self):
-        """Test that package-level sync raises NotImplementedError."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_root = Path(tmpdir)
-            package_dir = repo_root / "mypackage"
-            package_dir.mkdir()
-            (package_dir / "__init__.py").write_text("")
-
-            with pytest.raises(NotImplementedError, match="Package-level"):
-                sync_entity("mypackage", force=False, repo_root=repo_root)
-
     def test_sync_preserves_existing_docstring_content(self):
         """Test that sync preserves existing docstring content."""
         with tempfile.TemporaryDirectory() as tmpdir:

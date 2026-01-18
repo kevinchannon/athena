@@ -359,7 +359,6 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
     Raises:
         FileNotFoundError: If entity file doesn't exist
         ValueError: If entity is not found in file or path is invalid
-        NotImplementedError: For package/module level sync
     """
     status = inspect_entity(entity_path_str, repo_root)
 
@@ -367,6 +366,29 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
         return False
 
     entity_path = parse_entity_path(entity_path_str)
+
+    # Handle package-level sync
+    if entity_path.is_package:
+        package_dir = resolve_entity_path(entity_path, repo_root)
+        init_file = package_dir / "__init__.py"
+
+        # Read __init__.py (or use empty string if it doesn't exist)
+        source_code = init_file.read_text() if init_file.exists() else ""
+
+        # Extract current package docstring
+        current_docstring = extract_module_docstring(source_code)
+        if current_docstring:
+            current_docstring = current_docstring.strip()
+
+        # Update @athena tag in docstring
+        parser = PythonParser()
+        updated_docstring = parser.update_athena_tag(current_docstring, status.calculated_hash)
+
+        # Update package docstring in __init__.py
+        updated_source = update_module_docstring(source_code, updated_docstring)
+        init_file.write_text(updated_source)
+
+        return True
 
     # Handle module-level sync
     if entity_path.is_module:
