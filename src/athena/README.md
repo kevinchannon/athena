@@ -31,7 +31,8 @@ use `athena --help` to see up-to-date information about the available features:
 
 ```
 ╭─ Commands ─────────────────────────────────────────────────────────────────────╮
-│ locate          Locate entities (functions, classes, methods) by name.         │
+│ locate          Locate entities (functions, classes, methods, modules,         │
+│                 packages) by name.                                             │
 │ info            Get detailed information about a code entity or package.       │
 │ mcp-server      Start the MCP server for Claude Code integration.              │
 │ install-mcp     Install MCP server configuration for Claude Code.              │
@@ -42,9 +43,23 @@ use `athena --help` to see up-to-date information about the available features:
 ```
 
 Generally, you will install `athena` and then:
-- Run `athena sync` in your codebase. This will add Athena's hashes to all the docstrings and allow `athena` to detect code changes that have invalidated the docstrings.
-- After code changes, run `athena status` to see a table of all the functions that have been updated and may have had their docstrings invalidated.
+- Run `athena sync` in your codebase. This will add Athena's hashes to all the docstrings (for functions, classes, methods, modules, and packages) and allow `athena` to detect code changes that have invalidated the docstrings.
+- After code changes, run `athena status` to see a table of all the entities that have been updated and may have had their docstrings invalidated.
 - Update the necessary docstrings and then run `athena sync` again to update all the necessary hashes.
+
+### Supported Entity Types
+
+Athena tracks docstrings for:
+- **Functions** — Standalone functions
+- **Classes** — Class definitions
+- **Methods** — Class methods
+- **Modules** — Individual Python files (module-level docstrings)
+- **Packages** — Directories with `__init__.py` (package-level docstrings in `__init__.py`)
+
+For modules and packages, Athena uses intelligent hashing:
+- **Module hashes** are based on the complete file AST (excluding docstrings), capturing all semantic changes
+- **Package hashes** are based on `__init__.py` content plus the manifest of direct children (files and sub-packages)
+- This means package hashes change when files are added/removed/renamed, but remain stable when only implementation details change within existing modules
 
 If you want to find an entity in the codebase, then just run `athena locate <entity>` to get details on the file and lines the entity occupies:
 ```bash
