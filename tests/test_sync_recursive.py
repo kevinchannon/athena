@@ -161,15 +161,15 @@ class MyClass:
             # Sync recursively
             count = sync_recursive("module.py", force=False, repo_root=repo_root)
 
-            # Should update 3 entities: func1, func2, MyClass, method
-            assert count == 4
+            # Should update 5 entities: module, func1, func2, MyClass, method
+            assert count == 5
 
             # Verify all have tags
             code = test_file.read_text()
             import re
 
             tags = re.findall(r"@athena:\s*([0-9a-f]{12})", code)
-            assert len(tags) == 4
+            assert len(tags) == 5
 
     def test_sync_class_recursively(self):
         """Test recursive sync of class and methods."""
@@ -226,10 +226,11 @@ class MyClass:
             # Sync package recursively
             count = sync_recursive("mypackage", force=False, repo_root=repo_root)
 
-            # Should update func and Class1
-            assert count == 2
+            # Should update package, func, and Class1
+            assert count == 3
 
-            # Verify tags in both files
+            # Verify tags in both files and package
+            assert "@athena:" in (pkg / "__init__.py").read_text()
             assert "@athena:" in mod1.read_text()
             assert "@athena:" in mod2.read_text()
 
@@ -269,7 +270,7 @@ def func2():
 
             # First sync
             count1 = sync_recursive("module.py", force=False, repo_root=repo_root)
-            assert count1 == 2
+            assert count1 == 3  # module, func1, func2
 
             # Second sync without force - no updates
             count2 = sync_recursive("module.py", force=False, repo_root=repo_root)
@@ -277,7 +278,7 @@ def func2():
 
             # Third sync with force - should update all
             count3 = sync_recursive("module.py", force=True, repo_root=repo_root)
-            assert count3 == 2
+            assert count3 == 3  # module, func1, func2
 
     def test_sync_recursive_continues_on_error(self):
         """Test that recursive sync continues even if one entity fails."""

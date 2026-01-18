@@ -579,8 +579,16 @@ def collect_sub_entities(entity_path: EntityPath, repo_root: Path) -> list[str]:
             if should_exclude_path(py_file, repo_root):
                 continue
 
+            # Handle subpackages (nested __init__.py files)
             if py_file.name == "__init__.py":
-                continue  # Skip __init__ for now
+                # Skip the package's own __init__.py (it's already handled by sync_recursive)
+                if py_file.parent == resolved_path:
+                    continue
+
+                # This is a subpackage - add it as a package entity
+                rel_path = py_file.parent.relative_to(repo_root)
+                sub_entities.append(str(rel_path))
+                continue
 
             # Get relative path from repo root
             rel_path = py_file.relative_to(repo_root)
