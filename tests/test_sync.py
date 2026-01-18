@@ -275,14 +275,15 @@ def foo():
             with pytest.raises(ValueError):
                 sync_entity("", force=False, repo_root=repo_root)
 
-    def test_sync_module_level_not_implemented(self):
-        """Test that module-level sync raises NotImplementedError."""
+    def test_sync_module_without_docstring(self):
+        """Test syncing module that has no docstring."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
             test_file = repo_root / "test.py"
-            test_file.write_text('"""Module docstring."""\n')
+            test_file.write_text("x = 1\n")
 
-            with pytest.raises(NotImplementedError, match="Module-level"):
+            # Sync should not be implemented yet (Step 1.4)
+            with pytest.raises(NotImplementedError):
                 sync_entity("test.py", force=False, repo_root=repo_root)
 
     def test_sync_package_level_not_implemented(self):
@@ -461,6 +462,89 @@ def foo():
 
             with pytest.raises(ValueError, match="Entity not found"):
                 inspect_entity("test.py:bar", repo_root)
+
+    def test_inspect_module_no_docstring(self):
+        """Test inspecting module without docstring."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text("x = 1\ny = 2\n")
+
+            status = inspect_entity("test.py", repo_root)
+
+            assert status.kind == "module"
+            assert status.path == "test.py"
+            assert status.extent.start == 0
+            assert status.extent.end == 1  # Last line (0-indexed)
+            assert status.recorded_hash is None
+            assert len(status.calculated_hash) == 12
+
+    def test_inspect_module_with_docstring_no_tag(self):
+        """Test inspecting module with docstring but no @athena tag."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text('"""Module docstring."""\nx = 1\n')
+
+            status = inspect_entity("test.py", repo_root)
+
+            assert status.kind == "module"
+            assert status.recorded_hash is None
+            assert len(status.calculated_hash) == 12
+
+    def test_inspect_module_with_tag(self):
+        """Test inspecting module with existing @athena tag."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                '"""Module docstring.\n@athena: abc123def456\n"""\nx = 1\n'
+            )
+
+            status = inspect_entity("test.py", repo_root)
+
+            assert status.kind == "module"
+            assert status.recorded_hash == "abc123def456"
+            assert len(status.calculated_hash) == 12
+            # Hash should not match the arbitrary one we put in
+            assert status.calculated_hash != "abc123def456"
+
+    def test_inspect_module_hash_matches(self):
+        """Test inspecting module where computed hash matches recorded hash."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+
+            # First write code and compute its hash
+            from athena.hashing import compute_module_hash
+            code = "x = 1\ny = 2\n"
+            computed_hash = compute_module_hash(code)
+
+            # Now write file with that hash in docstring
+            test_file.write_text(
+                f'"""Module.\n@athena: {computed_hash}\n"""\n{code}'
+            )
+
+            status = inspect_entity("test.py", repo_root)
+
+            assert status.kind == "module"
+            assert status.recorded_hash == computed_hash
+            assert status.calculated_hash == computed_hash
+
+    def test_inspect_module_hash_mismatch(self):
+        """Test inspecting module where hashes don't match."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                '"""Module.\n@athena: abcdef012345\n"""\nx = 1\n'
+            )
+
+            status = inspect_entity("test.py", repo_root)
+
+            assert status.kind == "module"
+            assert status.recorded_hash == "abcdef012345"
+            assert status.calculated_hash != "abcdef012345"
 
 
 class TestMultiLineSignatures:
