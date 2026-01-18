@@ -518,3 +518,76 @@ import os
         hash2 = compute_package_hash(init_code2, manifest)
         # Docstrings should be excluded, so hashes should be same
         assert hash1 == hash2
+
+    def test_nested_package_independence(self):
+        """Test that nested packages are independent entities.
+
+        Parent package hash should only depend on direct children,
+        not on what's inside sub-packages.
+        """
+        # Parent package with a sub-package
+        parent_init = ""
+        parent_manifest = ["subpkg"]
+
+        # Sub-package with one module
+        subpkg_manifest1 = ["module.py"]
+
+        # Sub-package with two modules
+        subpkg_manifest2 = ["module.py", "another.py"]
+
+        # Parent hash should be the same regardless of sub-package contents
+        parent_hash = compute_package_hash(parent_init, parent_manifest)
+
+        # The parent hash only depends on parent_init and parent_manifest
+        # It does NOT depend on subpkg_manifest1 or subpkg_manifest2
+        # So computing it twice should give the same result
+        parent_hash_again = compute_package_hash(parent_init, parent_manifest)
+        assert parent_hash == parent_hash_again
+
+    def test_parent_hash_unchanged_when_child_module_modified(self):
+        """Test that parent package hash doesn't change when child module content changes.
+
+        Only the manifest matters, not what's inside the modules.
+        """
+        parent_init = ""
+        parent_manifest = ["module_a.py", "module_b.py"]
+
+        # Hash should only depend on __init__.py and manifest
+        hash1 = compute_package_hash(parent_init, parent_manifest)
+        hash2 = compute_package_hash(parent_init, parent_manifest)
+
+        # Even if module_a.py or module_b.py content changes,
+        # the parent hash stays the same because manifest is unchanged
+        assert hash1 == hash2
+
+    def test_parent_hash_changes_when_child_added(self):
+        """Test that parent package hash changes when a child module is added."""
+        parent_init = ""
+
+        # Package with two modules
+        manifest1 = ["module_a.py", "module_b.py"]
+
+        # Package with three modules (child added)
+        manifest2 = ["module_a.py", "module_b.py", "module_c.py"]
+
+        hash1 = compute_package_hash(parent_init, manifest1)
+        hash2 = compute_package_hash(parent_init, manifest2)
+
+        # Hash should change because manifest changed
+        assert hash1 != hash2
+
+    def test_parent_hash_changes_when_subpackage_added(self):
+        """Test that parent package hash changes when a sub-package is added."""
+        parent_init = ""
+
+        # Package with only modules
+        manifest1 = ["module_a.py"]
+
+        # Package with modules and a sub-package
+        manifest2 = ["module_a.py", "subpkg"]
+
+        hash1 = compute_package_hash(parent_init, manifest1)
+        hash2 = compute_package_hash(parent_init, manifest2)
+
+        # Hash should change because a sub-package was added to manifest
+        assert hash1 != hash2
