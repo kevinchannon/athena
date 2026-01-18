@@ -296,7 +296,7 @@ def func2():
 
             # Sync recursively - should succeed
             count = sync_recursive("module.py", force=False, repo_root=repo_root)
-            assert count == 2
+            assert count == 3  # module, func1, func2
 
     def test_sync_nested_package(self):
         """Test recursive sync of nested package structure."""
@@ -322,8 +322,10 @@ def func2():
             # Sync top-level package recursively
             count = sync_recursive("pkg1", force=False, repo_root=repo_root)
 
-            # Should find and sync the nested function
-            assert count == 1
+            # Should sync pkg1, pkg2, and deep_func
+            assert count == 3
+            assert "@athena:" in (pkg1 / "__init__.py").read_text()
+            assert "@athena:" in (pkg2 / "__init__.py").read_text()
             assert "@athena:" in mod.read_text()
 
     def test_sync_recursive_returns_update_count(self):
@@ -354,7 +356,7 @@ class MyClass:
 
             # First sync - all should update
             count1 = sync_recursive("module.py", force=False, repo_root=repo_root)
-            assert count1 == 6  # 2 funcs + 1 class + 3 methods
+            assert count1 == 7  # module + 2 funcs + 1 class + 3 methods
 
             # Modify one function
             code = test_file.read_text()
