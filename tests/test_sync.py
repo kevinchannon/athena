@@ -537,14 +537,14 @@ def foo():
             repo_root = Path(tmpdir)
             test_file = repo_root / "test.py"
             test_file.write_text(
-                '"""Module.\n@athena: oldoldoldold\n"""\nx = 1\n'
+                '"""Module.\n@athena: abcdef012345\n"""\nx = 1\n'
             )
 
             status = inspect_entity("test.py", repo_root)
 
             assert status.kind == "module"
-            assert status.recorded_hash == "oldoldoldold"
-            assert status.calculated_hash != "oldoldoldold"
+            assert status.recorded_hash == "abcdef012345"
+            assert status.calculated_hash != "abcdef012345"
 
 
 class TestMultiLineSignatures:

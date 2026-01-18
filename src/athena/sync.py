@@ -333,6 +333,10 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
         return False
 
     entity_path = parse_entity_path(entity_path_str)
+
+    # Module-level sync not yet implemented (Step 1.4)
+    if entity_path.is_module:
+        raise NotImplementedError("Module-level sync not yet implemented")
     resolved_path = resolve_entity_path(entity_path, repo_root)
     source_code = resolved_path.read_text()
 
