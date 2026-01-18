@@ -34,6 +34,27 @@ def get_init_file_path(package_path: Path) -> Path:
     return package_path / "__init__.py"
 
 
+def _should_skip_from_manifest(child: Path) -> bool:
+    """Check if a path should be excluded from the package manifest."""
+    if child.name.startswith("."):
+        return True
+    if child.name == "__pycache__":
+        return True
+    if child.name == "__init__.py":
+        return True
+    return False
+
+
+def _is_python_module(child: Path) -> bool:
+    """Check if a path is a Python module file."""
+    return child.is_file() and child.suffix == ".py"
+
+
+def _is_subpackage(child: Path) -> bool:
+    """Check if a path is a Python sub-package."""
+    return child.is_dir() and is_package(child)
+
+
 def get_package_manifest(package_path: Path) -> list[str]:
     """Get sorted manifest of direct children in a package.
 
@@ -59,27 +80,13 @@ def get_package_manifest(package_path: Path) -> list[str]:
         return []
 
     manifest = []
-
     for child in package_path.iterdir():
-        # Skip hidden files/directories
-        if child.name.startswith("."):
+        if _should_skip_from_manifest(child):
             continue
 
-        # Skip __pycache__
-        if child.name == "__pycache__":
-            continue
+        if _is_python_module(child):
+            manifest.append(child.name)
+        elif _is_subpackage(child):
+            manifest.append(child.name)
 
-        # Skip __init__.py (it's the package itself, not a child)
-        if child.name == "__init__.py":
-            continue
-
-        # Add Python modules (keep .py extension)
-        if child.is_file() and child.suffix == ".py":
-            manifest.append(child.name)  # e.g., "module.py"
-
-        # Add sub-packages (directories with __init__.py)
-        elif child.is_dir() and is_package(child):
-            manifest.append(child.name)  # e.g., "subpkg"
-
-    # Sort for deterministic hashing
     return sorted(manifest)
