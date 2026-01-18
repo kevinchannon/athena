@@ -775,6 +775,144 @@ class TestInspectPackage:
             assert hash2 != hash3
 
 
+class TestSyncPackage:
+    """Tests for package entity sync."""
+
+    def test_sync_package_empty_init(self):
+        """Test syncing package with empty __init__.py."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            package_dir = repo_root / "mypackage"
+            package_dir.mkdir()
+            init_file = package_dir / "__init__.py"
+            init_file.write_text("")
+
+            # Sync the package
+            result = sync_entity("mypackage", force=False, repo_root=repo_root)
+
+            # Should have updated (inserted new docstring)
+            assert result is True
+
+            # Check that docstring was added to __init__.py
+            updated_code = init_file.read_text()
+            assert "@athena:" in updated_code
+            assert '"""' in updated_code
+
+    def test_sync_package_with_existing_tag(self):
+        """Test syncing package with existing @athena tag."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            package_dir = repo_root / "mypackage"
+            package_dir.mkdir()
+            init_file = package_dir / "__init__.py"
+            original_code = '"""Package docstring.\n@athena: oldoldoldold\n"""\n'
+            init_file.write_text(original_code)
+
+            # Sync the package
+            result = sync_entity("mypackage", force=False, repo_root=repo_root)
+
+            # Should have updated
+            assert result is True
+
+            # Check that tag was updated
+            updated_code = init_file.read_text()
+            assert "@athena:" in updated_code
+            assert "oldoldoldold" not in updated_code
+            # New hash should be present
+            assert updated_code != original_code
+
+    def test_sync_package_no_update_when_hash_matches(self):
+        """Test that package is not updated when hash already matches."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            package_dir = repo_root / "mypackage"
+            package_dir.mkdir()
+            init_file = package_dir / "__init__.py"
+            init_file.write_text("")
+
+            # First, sync package to get correct hash
+            sync_entity("mypackage", force=False, repo_root=repo_root)
+
+            # Read the synced code
+            synced_code = init_file.read_text()
+
+            # Write it back (simulating no changes)
+            init_file.write_text(synced_code)
+
+            # Sync again - should return False (no update)
+            result = sync_entity("mypackage", force=False, repo_root=repo_root)
+            assert result is False
+
+            # Code should be unchanged
+            assert init_file.read_text() == synced_code
+
+    def test_sync_package_creates_init_if_missing(self):
+        """Test syncing package creates __init__.py if missing (namespace → package conversion)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            package_dir = repo_root / "mypackage"
+            package_dir.mkdir()
+
+            # Note: No __init__.py file created initially
+            # This represents a namespace package
+
+            # Try to sync the package
+            # Note: This should work because sync logic handles missing __init__.py
+            result = sync_entity("mypackage", force=False, repo_root=repo_root)
+
+            # Should have updated (created new file with docstring)
+            assert result is True
+
+            # Check that __init__.py was created with docstring
+            init_file = package_dir / "__init__.py"
+            assert init_file.exists()
+            updated_code = init_file.read_text()
+            assert "@athena:" in updated_code
+            assert '"""' in updated_code
+
+    def test_sync_package_with_shebang_in_init(self):
+        """Test syncing package with shebang line in __init__.py."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            package_dir = repo_root / "mypackage"
+            package_dir.mkdir()
+            init_file = package_dir / "__init__.py"
+            init_file.write_text("#!/usr/bin/env python3\n")
+
+            # Sync the package
+            result = sync_entity("mypackage", force=False, repo_root=repo_root)
+
+            # Should have updated
+            assert result is True
+
+            # Check that shebang is preserved
+            updated_code = init_file.read_text()
+            lines = updated_code.splitlines()
+            assert lines[0] == "#!/usr/bin/env python3"
+            assert "@athena:" in updated_code
+
+    def test_sync_package_with_encoding_in_init(self):
+        """Test syncing package with encoding declaration in __init__.py."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            package_dir = repo_root / "mypackage"
+            package_dir.mkdir()
+            init_file = package_dir / "__init__.py"
+            init_file.write_text("# -*- coding: utf-8 -*-\n")
+
+            # Sync the package
+            result = sync_entity("mypackage", force=False, repo_root=repo_root)
+
+            # Should have updated
+            assert result is True
+
+            # Check that encoding is preserved
+            updated_code = init_file.read_text()
+            lines = updated_code.splitlines()
+            assert lines[0] == "# -*- coding: utf-8 -*-"
+            assert "@athena:" in updated_code
+
+
 class TestMultiLineSignatures:
     """Tests for correct handling of multi-line signatures and class definitions."""
 
