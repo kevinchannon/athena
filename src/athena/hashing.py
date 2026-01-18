@@ -184,9 +184,6 @@ def compute_package_hash(init_source_code: str, manifest: list[str]) -> str:
     else:
         init_serialization = ""
 
-    # Serialize manifest as joined string
     manifest_serialization = "|".join(manifest)
-
-    # Combine both components and hash
     combined = f"{init_serialization}||{manifest_serialization}"
     return compute_hash(combined)
