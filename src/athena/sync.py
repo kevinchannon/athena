@@ -637,8 +637,8 @@ def collect_sub_entities(entity_path: EntityPath, repo_root: Path) -> list[str]:
 def sync_recursive(entity_path_str: str, force: bool, repo_root: Path) -> int:
     """Recursively sync an entity and all its sub-entities.
 
-    For modules: syncs all functions, classes, and methods
-    For packages: syncs all modules and their entities
+    For modules: syncs the module itself and all functions, classes, and methods
+    For packages: syncs the package itself and all modules and their entities
     For classes: syncs the class and all its methods
     For functions/methods: syncs only that entity
 
@@ -655,9 +655,10 @@ def sync_recursive(entity_path_str: str, force: bool, repo_root: Path) -> int:
     # Collect all entities to sync (including the main entity if applicable)
     entities_to_sync = []
 
-    # For packages and modules, we only sync sub-entities
+    # For packages and modules, sync the package/module itself and all sub-entities
     if entity_path.is_package or entity_path.is_module:
-        entities_to_sync = collect_sub_entities(entity_path, repo_root)
+        entities_to_sync.append(entity_path_str)
+        entities_to_sync.extend(collect_sub_entities(entity_path, repo_root))
     else:
         # For classes, sync the class itself and all methods
         if entity_path.is_class:
