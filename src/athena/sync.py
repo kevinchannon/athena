@@ -6,7 +6,7 @@ from pathlib import Path
 from athena.docstring_updater import update_docstring_in_source
 from athena.entity_path import EntityPath, parse_entity_path, resolve_entity_path
 from athena.hashing import compute_class_hash, compute_function_hash, compute_module_hash
-from athena.module_docstring_updater import extract_module_docstring
+from athena.module_docstring_updater import extract_module_docstring, update_module_docstring
 from athena.models import EntityStatus, Location
 from athena.parsers.python_parser import PythonParser
 
@@ -334,9 +334,26 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
 
     entity_path = parse_entity_path(entity_path_str)
 
-    # Module-level sync not yet implemented (Step 1.4)
+    # Handle module-level sync
     if entity_path.is_module:
-        raise NotImplementedError("Module-level sync not yet implemented")
+        resolved_path = resolve_entity_path(entity_path, repo_root)
+        source_code = resolved_path.read_text()
+
+        # Extract current module docstring
+        current_docstring = extract_module_docstring(source_code)
+        if current_docstring:
+            current_docstring = current_docstring.strip()
+
+        # Update @athena tag in docstring
+        parser = PythonParser()
+        updated_docstring = parser.update_athena_tag(current_docstring, status.calculated_hash)
+
+        # Update module docstring in file
+        updated_source = update_module_docstring(source_code, updated_docstring)
+        resolved_path.write_text(updated_source)
+
+        return True
+
     resolved_path = resolve_entity_path(entity_path, repo_root)
     source_code = resolved_path.read_text()
 

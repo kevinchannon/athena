@@ -282,9 +282,139 @@ def foo():
             test_file = repo_root / "test.py"
             test_file.write_text("x = 1\n")
 
-            # Sync should not be implemented yet (Step 1.4)
-            with pytest.raises(NotImplementedError):
-                sync_entity("test.py", force=False, repo_root=repo_root)
+            # Sync the module
+            result = sync_entity("test.py", force=False, repo_root=repo_root)
+
+            # Should have updated (inserted new docstring)
+            assert result is True
+
+            # Check that docstring was added
+            updated_code = test_file.read_text()
+            assert "@athena:" in updated_code
+            assert '"""' in updated_code
+
+    def test_sync_module_with_existing_tag(self):
+        """Test syncing module with existing @athena tag."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            original_code = '"""Module docstring.\n@athena: oldoldoldold\n"""\nx = 1\n'
+            test_file.write_text(original_code)
+
+            # Sync the module
+            result = sync_entity("test.py", force=False, repo_root=repo_root)
+
+            # Should have updated
+            assert result is True
+
+            # Check that tag was updated
+            updated_code = test_file.read_text()
+            assert "@athena:" in updated_code
+            assert "oldoldoldold" not in updated_code
+            # New hash should be present
+            assert updated_code != original_code
+
+    def test_sync_module_no_update_when_hash_matches(self):
+        """Test that module is not updated when hash already matches."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+
+            # First, create module and sync it to get correct hash
+            initial_code = "x = 1\n"
+            test_file.write_text(initial_code)
+            sync_entity("test.py", force=False, repo_root=repo_root)
+
+            # Read the synced code
+            synced_code = test_file.read_text()
+
+            # Write it back (simulating no changes)
+            test_file.write_text(synced_code)
+
+            # Sync again - should return False (no update)
+            result = sync_entity("test.py", force=False, repo_root=repo_root)
+            assert result is False
+
+            # Code should be unchanged
+            assert test_file.read_text() == synced_code
+
+    def test_sync_module_with_shebang(self):
+        """Test syncing module with shebang line."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text("#!/usr/bin/env python3\nx = 1\n")
+
+            # Sync the module
+            result = sync_entity("test.py", force=False, repo_root=repo_root)
+
+            # Should have updated
+            assert result is True
+
+            # Check that shebang is preserved
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+            assert lines[0] == "#!/usr/bin/env python3"
+            assert "@athena:" in updated_code
+
+    def test_sync_module_with_encoding_declaration(self):
+        """Test syncing module with encoding declaration."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text("# -*- coding: utf-8 -*-\nx = 1\n")
+
+            # Sync the module
+            result = sync_entity("test.py", force=False, repo_root=repo_root)
+
+            # Should have updated
+            assert result is True
+
+            # Check that encoding is preserved
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+            assert lines[0] == "# -*- coding: utf-8 -*-"
+            assert "@athena:" in updated_code
+
+    def test_sync_module_with_both_headers(self):
+        """Test syncing module with both shebang and encoding."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text(
+                "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\nx = 1\n"
+            )
+
+            # Sync the module
+            result = sync_entity("test.py", force=False, repo_root=repo_root)
+
+            # Should have updated
+            assert result is True
+
+            # Check that both headers are preserved
+            updated_code = test_file.read_text()
+            lines = updated_code.splitlines()
+            assert lines[0] == "#!/usr/bin/env python3"
+            assert lines[1] == "# -*- coding: utf-8 -*-"
+            assert "@athena:" in updated_code
+
+    def test_sync_empty_module(self):
+        """Test syncing an empty module."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            test_file = repo_root / "test.py"
+            test_file.write_text("")
+
+            # Sync the module
+            result = sync_entity("test.py", force=False, repo_root=repo_root)
+
+            # Should have updated
+            assert result is True
+
+            # Check that docstring was added
+            updated_code = test_file.read_text()
+            assert "@athena:" in updated_code
+            assert '"""' in updated_code
 
     def test_sync_package_level_not_implemented(self):
         """Test that package-level sync raises NotImplementedError."""
