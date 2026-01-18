@@ -155,21 +155,38 @@ def compute_module_hash(source_code: str) -> str:
     return compute_hash(serialization)
 
 
-def compute_package_hash(module_docstrings: list[str]) -> str:
-    """Compute hash for a package based on non-whitespace from module docstrings.
+def compute_package_hash(init_source_code: str, manifest: list[str]) -> str:
+    """Compute hash for a package based on __init__.py content and manifest.
+
+    The hash is calculated from two components:
+    1. AST serialization of __init__.py (excluding docstrings)
+    2. Sorted manifest of direct children (files and sub-packages)
+
+    This design ties the package hash to its interface and structure rather
+    than implementation details of contained modules.
 
     Args:
-        module_docstrings: List of module docstrings from package
+        init_source_code: Source code of __init__.py (empty string if file doesn't exist)
+        manifest: Sorted list of direct children (e.g., ["module.py", "subpkg"])
 
     Returns:
         12-character hex hash
     """
-    # Same logic as module hash - concatenate non-whitespace
-    combined = ""
-    for docstring in module_docstrings:
-        if docstring:
-            # Remove all whitespace
-            no_whitespace = re.sub(r"\s+", "", docstring)
-            combined += no_whitespace
+    import tree_sitter_python
+    from tree_sitter import Language, Parser
 
+    # Parse and serialize __init__.py AST (excluding docstrings)
+    if init_source_code:
+        language = Language(tree_sitter_python.language())
+        parser = Parser(language)
+        tree = parser.parse(bytes(init_source_code, "utf8"))
+        init_serialization = serialize_ast_node(tree.root_node, init_source_code)
+    else:
+        init_serialization = ""
+
+    # Serialize manifest as joined string
+    manifest_serialization = "|".join(manifest)
+
+    # Combine both components and hash
+    combined = f"{init_serialization}||{manifest_serialization}"
     return compute_hash(combined)
