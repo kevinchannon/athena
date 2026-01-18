@@ -5,9 +5,10 @@ from pathlib import Path
 
 from athena.docstring_updater import update_docstring_in_source
 from athena.entity_path import EntityPath, parse_entity_path, resolve_entity_path
-from athena.hashing import compute_class_hash, compute_function_hash, compute_module_hash
+from athena.hashing import compute_class_hash, compute_function_hash, compute_module_hash, compute_package_hash
 from athena.module_docstring_updater import extract_module_docstring, update_module_docstring
 from athena.models import EntityStatus, Location
+from athena.package_utils import get_init_file_path, get_package_manifest
 from athena.parsers.python_parser import PythonParser
 
 
@@ -122,9 +123,42 @@ def inspect_entity(entity_path_str: str, repo_root: Path) -> EntityStatus:
         raise ValueError(f"Cannot inspect excluded path: {entity_path.file_path}")
 
     if entity_path.is_package:
-        raise NotImplementedError(
-            "Package-level inspection not yet implemented. "
-            "Use module or entity-level inspection instead."
+        # Package-level inspection
+        init_file_path = get_init_file_path(resolved_path)
+
+        # Read __init__.py (or use empty string if it doesn't exist)
+        if init_file_path.exists():
+            init_source_code = init_file_path.read_text()
+        else:
+            init_source_code = ""
+
+        # Get package manifest
+        manifest = get_package_manifest(resolved_path)
+
+        # Compute package hash
+        computed_hash = compute_package_hash(init_source_code, manifest)
+
+        # Extract package docstring from __init__.py
+        current_docstring = extract_module_docstring(init_source_code) if init_source_code else None
+        if current_docstring:
+            current_docstring = current_docstring.strip()
+
+        # Parse @athena tag from docstring
+        parser = PythonParser()
+        current_hash = (
+            parser.parse_athena_tag(current_docstring) if current_docstring else None
+        )
+
+        # Package has no line extent (it's a directory)
+        # Use a dummy extent for compatibility
+        extent = Location(start=0, end=0)
+
+        return EntityStatus(
+            kind="package",
+            path=entity_path_str,
+            extent=extent,
+            recorded_hash=current_hash,
+            calculated_hash=computed_hash
         )
 
     source_code = resolved_path.read_text()
@@ -325,7 +359,6 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
     Raises:
         FileNotFoundError: If entity file doesn't exist
         ValueError: If entity is not found in file or path is invalid
-        NotImplementedError: For package/module level sync
     """
     status = inspect_entity(entity_path_str, repo_root)
 
@@ -333,6 +366,29 @@ def sync_entity(entity_path_str: str, force: bool, repo_root: Path) -> bool:
         return False
 
     entity_path = parse_entity_path(entity_path_str)
+
+    # Handle package-level sync
+    if entity_path.is_package:
+        package_dir = resolve_entity_path(entity_path, repo_root)
+        init_file = package_dir / "__init__.py"
+
+        # Read __init__.py (or use empty string if it doesn't exist)
+        source_code = init_file.read_text() if init_file.exists() else ""
+
+        # Extract current package docstring
+        current_docstring = extract_module_docstring(source_code)
+        if current_docstring:
+            current_docstring = current_docstring.strip()
+
+        # Update @athena tag in docstring
+        parser = PythonParser()
+        updated_docstring = parser.update_athena_tag(current_docstring, status.calculated_hash)
+
+        # Update package docstring in __init__.py
+        updated_source = update_module_docstring(source_code, updated_docstring)
+        init_file.write_text(updated_source)
+
+        return True
 
     # Handle module-level sync
     if entity_path.is_module:
