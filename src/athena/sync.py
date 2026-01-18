@@ -5,9 +5,10 @@ from pathlib import Path
 
 from athena.docstring_updater import update_docstring_in_source
 from athena.entity_path import EntityPath, parse_entity_path, resolve_entity_path
-from athena.hashing import compute_class_hash, compute_function_hash, compute_module_hash
+from athena.hashing import compute_class_hash, compute_function_hash, compute_module_hash, compute_package_hash
 from athena.module_docstring_updater import extract_module_docstring, update_module_docstring
 from athena.models import EntityStatus, Location
+from athena.package_utils import get_init_file_path, get_package_manifest
 from athena.parsers.python_parser import PythonParser
 
 
@@ -122,9 +123,42 @@ def inspect_entity(entity_path_str: str, repo_root: Path) -> EntityStatus:
         raise ValueError(f"Cannot inspect excluded path: {entity_path.file_path}")
 
     if entity_path.is_package:
-        raise NotImplementedError(
-            "Package-level inspection not yet implemented. "
-            "Use module or entity-level inspection instead."
+        # Package-level inspection
+        init_file_path = get_init_file_path(resolved_path)
+
+        # Read __init__.py (or use empty string if it doesn't exist)
+        if init_file_path.exists():
+            init_source_code = init_file_path.read_text()
+        else:
+            init_source_code = ""
+
+        # Get package manifest
+        manifest = get_package_manifest(resolved_path)
+
+        # Compute package hash
+        computed_hash = compute_package_hash(init_source_code, manifest)
+
+        # Extract package docstring from __init__.py
+        current_docstring = extract_module_docstring(init_source_code) if init_source_code else None
+        if current_docstring:
+            current_docstring = current_docstring.strip()
+
+        # Parse @athena tag from docstring
+        parser = PythonParser()
+        current_hash = (
+            parser.parse_athena_tag(current_docstring) if current_docstring else None
+        )
+
+        # Package has no line extent (it's a directory)
+        # Use a dummy extent for compatibility
+        extent = Location(start=0, end=0)
+
+        return EntityStatus(
+            kind="package",
+            path=entity_path_str,
+            extent=extent,
+            recorded_hash=current_hash,
+            calculated_hash=computed_hash
         )
 
     source_code = resolved_path.read_text()

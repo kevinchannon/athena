@@ -677,6 +677,115 @@ def foo():
             assert status.calculated_hash != "abcdef012345"
 
 
+class TestInspectPackage:
+    """Tests for package entity inspection."""
+
+    def test_inspect_package_empty_init(self):
+        """Test inspecting package with empty __init__.py."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            package_dir = repo_root / "mypackage"
+            package_dir.mkdir()
+            init_file = package_dir / "__init__.py"
+            init_file.write_text("")
+
+            status = inspect_entity("mypackage", repo_root)
+
+            assert status.kind == "package"
+            assert status.path == "mypackage"
+            assert status.extent.start == 0
+            assert status.extent.end == 0  # Dummy extent for packages
+            assert status.recorded_hash is None
+            assert len(status.calculated_hash) == 12
+
+    def test_inspect_package_with_init_code(self):
+        """Test inspecting package with code in __init__.py."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            package_dir = repo_root / "mypackage"
+            package_dir.mkdir()
+            init_file = package_dir / "__init__.py"
+            init_file.write_text("from .module import foo\n")
+
+            status = inspect_entity("mypackage", repo_root)
+
+            assert status.kind == "package"
+            assert status.path == "mypackage"
+            assert status.recorded_hash is None
+            assert len(status.calculated_hash) == 12
+
+    def test_inspect_package_with_docstring_no_tag(self):
+        """Test inspecting package with docstring but no @athena tag."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            package_dir = repo_root / "mypackage"
+            package_dir.mkdir()
+            init_file = package_dir / "__init__.py"
+            init_file.write_text('"""Package docstring."""\n')
+
+            status = inspect_entity("mypackage", repo_root)
+
+            assert status.kind == "package"
+            assert status.recorded_hash is None
+            assert len(status.calculated_hash) == 12
+
+    def test_inspect_package_with_tag(self):
+        """Test inspecting package with existing @athena tag."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            package_dir = repo_root / "mypackage"
+            package_dir.mkdir()
+            init_file = package_dir / "__init__.py"
+            init_file.write_text(
+                '"""Package docstring.\n@athena: abc123def456\n"""\n'
+            )
+
+            status = inspect_entity("mypackage", repo_root)
+
+            assert status.kind == "package"
+            assert status.recorded_hash == "abc123def456"
+            assert len(status.calculated_hash) == 12
+            # Hash should not match the arbitrary one we put in
+            assert status.calculated_hash != "abc123def456"
+
+    def test_inspect_package_hash_reflects_structure(self):
+        """Test that package hash reflects its file structure."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            package_dir = repo_root / "mypackage"
+            package_dir.mkdir()
+            init_file = package_dir / "__init__.py"
+            init_file.write_text("")
+
+            # Inspect empty package
+            status1 = inspect_entity("mypackage", repo_root)
+            hash1 = status1.calculated_hash
+
+            # Add a module file
+            module_file = package_dir / "module.py"
+            module_file.write_text("def foo(): pass\n")
+
+            # Inspect again
+            status2 = inspect_entity("mypackage", repo_root)
+            hash2 = status2.calculated_hash
+
+            # Hash should have changed
+            assert hash1 != hash2
+
+            # Add a sub-package
+            subpkg_dir = package_dir / "subpkg"
+            subpkg_dir.mkdir()
+            subpkg_init = subpkg_dir / "__init__.py"
+            subpkg_init.write_text("")
+
+            # Inspect again
+            status3 = inspect_entity("mypackage", repo_root)
+            hash3 = status3.calculated_hash
+
+            # Hash should have changed again
+            assert hash2 != hash3
+
+
 class TestMultiLineSignatures:
     """Tests for correct handling of multi-line signatures and class definitions."""
 
