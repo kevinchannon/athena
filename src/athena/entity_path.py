@@ -128,16 +128,10 @@ def resolve_entity_path(entity_path: EntityPath, repo_root: Path) -> Path | None
         if not full_path.is_dir():
             return None
 
-        # For the repository root (.), we don't require __init__.py
-        # For other directories, require __init__.py to be a valid package
-        if entity_path.file_path == ".":
-            return full_path
-
-        init_path = full_path / "__init__.py"
-        if init_path.exists():
-            # Return the directory path, not __init__.py
-            return full_path
-        return None
+        # Return the directory path for packages
+        # We allow packages without __init__.py (namespace packages)
+        # The sync logic can create __init__.py if needed
+        return full_path
 
     # For files, check if path exists
     if full_path.exists():

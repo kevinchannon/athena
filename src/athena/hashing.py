@@ -176,13 +176,11 @@ def compute_package_hash(init_source_code: str, manifest: list[str]) -> str:
     from tree_sitter import Language, Parser
 
     # Parse and serialize __init__.py AST (excluding docstrings)
-    if init_source_code:
-        language = Language(tree_sitter_python.language())
-        parser = Parser(language)
-        tree = parser.parse(bytes(init_source_code, "utf8"))
-        init_serialization = serialize_ast_node(tree.root_node, init_source_code)
-    else:
-        init_serialization = ""
+    # Always parse, even for empty content, to ensure consistent hashing
+    language = Language(tree_sitter_python.language())
+    parser = Parser(language)
+    tree = parser.parse(bytes(init_source_code, "utf8"))
+    init_serialization = serialize_ast_node(tree.root_node, init_source_code)
 
     manifest_serialization = "|".join(manifest)
     combined = f"{init_serialization}||{manifest_serialization}"
