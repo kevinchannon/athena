@@ -5,7 +5,7 @@ import re
 
 
 def detect_file_header(source_code: str) -> tuple[str | None, str | None, int]:
-    """Detect shebang and encoding declaration at the start of a file.
+    r"""Detect shebang and encoding declaration at the start of a file.
 
     Per PEP 263, encoding can be on line 1 or 2 (if shebang is present).
     Uses pattern: coding[:=]\s*([-\w.]+)
