@@ -211,19 +211,20 @@ class TestResolveEntityPath:
 
             assert result is None
 
-    def test_resolve_package_without_init_returns_none(self):
-        """Test that package without __init__.py returns None."""
+    def test_resolve_package_without_init_returns_path(self):
+        """Test that package without __init__.py returns directory path (namespace package)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
-            # Create directory but no __init__.py
+            # Create directory but no __init__.py (namespace package)
             package_dir = repo_root / "notapackage"
             package_dir.mkdir()
 
             entity_path = EntityPath(file_path="notapackage", entity_name=None)
             result = resolve_entity_path(entity_path, repo_root)
 
-            # Should return None because no __init__.py exists
-            assert result is None
+            # Should return the directory path even without __init__.py
+            # This allows sync to create __init__.py for namespace packages
+            assert result == package_dir
 
     def test_resolve_with_method_path(self):
         """Test resolving path with method specification."""
