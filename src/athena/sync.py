@@ -579,8 +579,16 @@ def collect_sub_entities(entity_path: EntityPath, repo_root: Path) -> list[str]:
             if should_exclude_path(py_file, repo_root):
                 continue
 
+            # Handle subpackages (nested __init__.py files)
             if py_file.name == "__init__.py":
-                continue  # Skip __init__ for now
+                # Skip the package's own __init__.py (it's already handled by sync_recursive)
+                if py_file.parent == resolved_path:
+                    continue
+
+                # This is a subpackage - add it as a package entity
+                rel_path = py_file.parent.relative_to(repo_root)
+                sub_entities.append(str(rel_path))
+                continue
 
             # Get relative path from repo root
             rel_path = py_file.relative_to(repo_root)
@@ -637,8 +645,8 @@ def collect_sub_entities(entity_path: EntityPath, repo_root: Path) -> list[str]:
 def sync_recursive(entity_path_str: str, force: bool, repo_root: Path) -> int:
     """Recursively sync an entity and all its sub-entities.
 
-    For modules: syncs all functions, classes, and methods
-    For packages: syncs all modules and their entities
+    For modules: syncs the module itself and all functions, classes, and methods
+    For packages: syncs the package itself and all modules and their entities
     For classes: syncs the class and all its methods
     For functions/methods: syncs only that entity
 
@@ -655,9 +663,10 @@ def sync_recursive(entity_path_str: str, force: bool, repo_root: Path) -> int:
     # Collect all entities to sync (including the main entity if applicable)
     entities_to_sync = []
 
-    # For packages and modules, we only sync sub-entities
+    # For packages and modules, sync the package/module itself and all sub-entities
     if entity_path.is_package or entity_path.is_module:
-        entities_to_sync = collect_sub_entities(entity_path, repo_root)
+        entities_to_sync.append(entity_path_str)
+        entities_to_sync.extend(collect_sub_entities(entity_path, repo_root))
     else:
         # For classes, sync the class itself and all methods
         if entity_path.is_class:
