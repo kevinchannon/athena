@@ -365,4 +365,4 @@ class MyClass:
 
             # Second sync - only modified entity should update
             count2 = sync_recursive("module.py", force=False, repo_root=repo_root)
-            assert count2 == 1  # Only func1 changed
+            assert count2 == 2  # func1 changed, and module (which includes all entities)
