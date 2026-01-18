@@ -108,7 +108,9 @@ Athena includes Model Context Protocol (MCP) integration, exposing code navigati
 
 ### Available Tools
 
-- **`ack_locate`** — Find Python entity location (file path + line range)
+- **`ack_locate`** — Find entity location (file path + line range)
+- **`ack_info`** — Get information about an entity (kind, summary, etc.)
+- **`ack_status`** — Check whether all docstrings are up-to-date with the code they describe 
 
 ### Installation
 
