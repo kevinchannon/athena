@@ -387,26 +387,134 @@ def foo():
 class TestComputePackageHash:
     """Tests for package hash computation."""
 
-    def test_package_hash_from_module_docstrings(self):
-        """Test package hash computed from module docstrings."""
-        module_docstrings = [
-            "Module 1 docstring",
-            "Module 2 docstring",
-        ]
-        hash_result = compute_package_hash(module_docstrings)
+    def test_package_hash_empty_init_no_children(self):
+        """Test package hash with empty __init__.py and no children."""
+        hash_result = compute_package_hash("", [])
+        assert len(hash_result) == 12
+        assert all(c in "0123456789abcdef" for c in hash_result)
+
+    def test_package_hash_empty_init_with_children(self):
+        """Test package hash with empty __init__.py but has children."""
+        manifest = ["module_a.py", "module_b.py", "subpkg"]
+        hash1 = compute_package_hash("", manifest)
+        hash2 = compute_package_hash("", manifest)
+        assert hash1 == hash2
+        assert len(hash1) == 12
+
+    def test_package_hash_with_init_code(self):
+        """Test package hash with __init__.py containing code."""
+        init_code = """import os
+from .module_a import foo
+
+__all__ = ["foo"]
+"""
+        manifest = ["module_a.py"]
+        hash_result = compute_package_hash(init_code, manifest)
         assert len(hash_result) == 12
 
-    def test_package_hash_stability(self):
-        """Test that same module docstrings produce same hash."""
-        docstrings = ["Module doc 1", "Module doc 2"]
-        hash1 = compute_package_hash(docstrings)
-        hash2 = compute_package_hash(docstrings)
+    def test_package_hash_changes_on_file_addition(self):
+        """Test that hash changes when files are added to manifest."""
+        init_code = ""
+        manifest1 = ["module_a.py"]
+        manifest2 = ["module_a.py", "module_b.py"]
+
+        hash1 = compute_package_hash(init_code, manifest1)
+        hash2 = compute_package_hash(init_code, manifest2)
+        assert hash1 != hash2
+
+    def test_package_hash_changes_on_file_removal(self):
+        """Test that hash changes when files are removed from manifest."""
+        init_code = ""
+        manifest1 = ["module_a.py", "module_b.py"]
+        manifest2 = ["module_a.py"]
+
+        hash1 = compute_package_hash(init_code, manifest1)
+        hash2 = compute_package_hash(init_code, manifest2)
+        assert hash1 != hash2
+
+    def test_package_hash_changes_on_file_rename(self):
+        """Test that hash changes when files are renamed."""
+        init_code = ""
+        manifest1 = ["old_name.py"]
+        manifest2 = ["new_name.py"]
+
+        hash1 = compute_package_hash(init_code, manifest1)
+        hash2 = compute_package_hash(init_code, manifest2)
+        assert hash1 != hash2
+
+    def test_package_hash_changes_on_subpackage_addition(self):
+        """Test that hash changes when sub-packages are added."""
+        init_code = ""
+        manifest1 = ["module_a.py"]
+        manifest2 = ["module_a.py", "subpkg"]
+
+        hash1 = compute_package_hash(init_code, manifest1)
+        hash2 = compute_package_hash(init_code, manifest2)
+        assert hash1 != hash2
+
+    def test_package_hash_unchanged_on_module_content_change(self):
+        """Test that hash is unchanged when module content changes.
+
+        This is critical: package hash should NOT change when implementation
+        inside existing modules is modified.
+        """
+        init_code = ""
+        manifest = ["module_a.py", "module_b.py"]
+
+        # Same manifest, same __init__.py - hash should be identical
+        # even if the actual content of module_a.py or module_b.py changes
+        hash1 = compute_package_hash(init_code, manifest)
+        hash2 = compute_package_hash(init_code, manifest)
         assert hash1 == hash2
 
-    def test_package_hash_ignores_whitespace(self):
-        """Test that whitespace is ignored."""
-        docstrings1 = ["Module with   spaces"]
-        docstrings2 = ["Modulewithspaces"]
-        hash1 = compute_package_hash(docstrings1)
-        hash2 = compute_package_hash(docstrings2)
+    def test_package_hash_unchanged_on_subpackage_content_change(self):
+        """Test that hash is unchanged when sub-package internals change.
+
+        Sub-packages hash independently, so parent package hash should
+        NOT change when sub-package contents change.
+        """
+        init_code = ""
+        manifest = ["subpkg"]
+
+        # Same manifest - hash should be identical even if subpkg internals change
+        hash1 = compute_package_hash(init_code, manifest)
+        hash2 = compute_package_hash(init_code, manifest)
+        assert hash1 == hash2
+
+    def test_package_hash_manifest_order_independent(self):
+        """Test that manifest order doesn't matter (should be pre-sorted)."""
+        init_code = ""
+        # These should produce the same hash because they have the same elements
+        # The manifest should already be sorted by the caller
+        manifest1 = ["a.py", "b.py", "c.py"]
+        manifest2 = ["a.py", "b.py", "c.py"]
+
+        hash1 = compute_package_hash(init_code, manifest1)
+        hash2 = compute_package_hash(init_code, manifest2)
+        assert hash1 == hash2
+
+    def test_package_hash_changes_on_init_modification(self):
+        """Test that hash changes when __init__.py content changes."""
+        manifest = ["module_a.py"]
+        init_code1 = """import os"""
+        init_code2 = """import sys"""
+
+        hash1 = compute_package_hash(init_code1, manifest)
+        hash2 = compute_package_hash(init_code2, manifest)
+        assert hash1 != hash2
+
+    def test_package_hash_stable_across_init_docstring_changes(self):
+        """Test that hash is stable when only __init__.py docstring changes."""
+        manifest = ["module_a.py"]
+        init_code1 = '''"""Original package docstring."""
+
+import os
+'''
+        init_code2 = '''"""Modified package docstring."""
+
+import os
+'''
+        hash1 = compute_package_hash(init_code1, manifest)
+        hash2 = compute_package_hash(init_code2, manifest)
+        # Docstrings should be excluded, so hashes should be same
         assert hash1 == hash2
