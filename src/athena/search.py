@@ -177,9 +177,12 @@ def search_docstrings(
     if not query:
         return []
 
-    # Find repository root if not provided
+    # Find or validate repository root
     if root is None:
         root = find_repository_root()
+    else:
+        # Validate that provided root is a git repository
+        root = find_repository_root(root)
 
     # Load configuration if not provided
     if config is None:
