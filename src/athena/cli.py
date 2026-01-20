@@ -12,6 +12,7 @@ from athena.info import get_entity_info
 from athena.locate import locate_entity
 from athena.models import ClassInfo, FunctionInfo, MethodInfo, ModuleInfo, PackageInfo
 from athena.repository import RepositoryNotFoundError, find_repository_root
+from athena.search import search_docstrings
 
 app = typer.Typer(
     help="Athena Code Knowledge - semantic code analysis tool",
@@ -56,6 +57,85 @@ def locate(
             for entity in entities:
                 extent_str = f"{entity.extent.start}-{entity.extent.end}"
                 table.add_row(entity.kind, entity.path, extent_str)
+
+            console.print(table)
+
+    except RepositoryNotFoundError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@app.command()
+def search(
+    query: str,
+    json: bool = typer.Option(False, "--json", "-j", help="Output as JSON instead of table"),
+    max_results: Optional[int] = typer.Option(None, "--max-results", "-k", help="Maximum number of results to return"),
+):
+    """Search docstrings using BM25 ranking.
+
+    Searches all docstrings in the repository using natural language queries
+    with BM25 ranking algorithm and code-aware tokenization.
+
+    Args:
+        query: Natural language search query
+        json: If True, output JSON format; otherwise output as table (default)
+        max_results: Maximum number of results to return (overrides config default)
+
+    Examples:
+        athena search "JWT authentication"
+        athena search "parse configuration file" --max-results 5
+        athena search "BM25 scoring" --json
+    """
+    try:
+        # Load config and override max_results if specified
+        from athena.config import load_search_config
+
+        config = load_search_config()
+        if max_results is not None:
+            # Create new config with overridden max_results
+            from athena.config import SearchConfig
+            config = SearchConfig(
+                term_frequency_saturation=config.k1,
+                length_normalization=config.b,
+                max_results=max_results
+            )
+
+        results = search_docstrings(query, config=config)
+
+        if json:
+            # Convert results to dictionaries
+            results_dicts = []
+            for result in results:
+                result_dict = asdict(result)
+                results_dicts.append(result_dict)
+
+            # Output as JSON
+            typer.echo(json_module.dumps(results_dicts, indent=2))
+        else:
+            # Output as table
+            from rich.table import Table
+
+            if not results:
+                typer.echo("No results found")
+                return
+
+            table = Table(show_header=True, header_style="bold cyan", box=None)
+            table.add_column("Kind", style="green")
+            table.add_column("Path", style="blue")
+            table.add_column("Extent", style="yellow")
+            table.add_column("Summary", style="white")
+
+            for result in results:
+                extent_str = f"{result.extent.start}-{result.extent.end}"
+                # Truncate summary to first line if multi-line
+                summary = result.summary.split('\n')[0] if result.summary else ""
+                # Truncate summary if too long (max 80 chars)
+                if len(summary) > 80:
+                    summary = summary[:77] + "..."
+                table.add_row(result.kind, result.path, extent_str, summary)
 
             console.print(table)
 
