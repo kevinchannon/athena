@@ -33,6 +33,7 @@ use `athena --help` to see up-to-date information about the available features:
 ╭─ Commands ─────────────────────────────────────────────────────────────────────╮
 │ locate          Locate entities (functions, classes, methods, modules,         │
 │                 packages) by name.                                             │
+│ search          Search entities by docstring content using natural language.   │
 │ info            Get detailed information about a code entity or package.       │
 │ mcp-server      Start the MCP server for Claude Code integration.              │
 │ install-mcp     Install MCP server configuration for Claude Code.              │
@@ -64,8 +65,35 @@ For modules and packages, Athena uses intelligent hashing:
 If you want to find an entity in the codebase, then just run `athena locate <entity>` to get details on the file and lines the entity occupies:
 ```bash
 > athena locate get_task
- Kind    Path                    Extent  
+ Kind    Path                    Extent
  method  src/tasktree/parser.py  277-286
+```
+
+If you want to search for entities based on what they do (rather than their name), use `athena search` with a natural language query:
+```bash
+> athena search "parse Python code"
+ Kind      Path                              Extent   Summary
+ class     src/athena/parsers/python_parser  19-400   Parser for extracting entities from Python files
+ function  src/athena/parsers/utils.py      45-67    Parse a Python file and return its AST
+```
+
+The search command uses BM25 ranking to find the most relevant entities based on their docstrings. You can customize the number of results:
+```bash
+> athena search --max-results 5 "authentication"
+> athena search -k 3 "JWT token"  # Short form
+```
+
+Search also supports JSON output for programmatic use:
+```bash
+> athena search --json "parse Python code"
+```
+
+Configuration can be customized via a `.athena` file in your repository root:
+```yaml
+search:
+  term_frequency_saturation: 1.5  # BM25 k1 parameter (1.2-2.0)
+  length_normalization: 0.75      # BM25 b parameter (0.5-0.75)
+  max_results: 10                 # Default number of results
 ```
 
 Once you know where a thing is, then you can ask for info about it:
