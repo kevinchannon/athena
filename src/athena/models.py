@@ -86,5 +86,14 @@ class EntityStatus:
     calculated_hash: str  # Hash computed from AST
 
 
+@dataclass
+class SearchResult:
+    """Represents a search result with entity details and docstring summary."""
+    kind: str
+    path: str
+    extent: Location
+    summary: str
+
+
 # Union type for entity info
 EntityInfo = FunctionInfo | ClassInfo | MethodInfo | ModuleInfo | PackageInfo
