@@ -39,7 +39,8 @@ class BM25Searcher:
             0
         """
         self.tokenized_corpus = [tokenize(doc) for doc in documents]
-        self.bm25 = BM25Okapi(self.tokenized_corpus, k1=k1, b=b)
+        # BM25Okapi can't handle empty corpus, so only initialize if we have documents
+        self.bm25 = BM25Okapi(self.tokenized_corpus, k1=k1, b=b) if documents else None
 
     def search(self, query: str, k: int = 10) -> list[tuple[int, float]]:
         """Search documents for query and return top-k ranked results.
@@ -64,6 +65,10 @@ class BM25Searcher:
         if not query:
             return []
 
+        # Handle empty corpus
+        if self.bm25 is None:
+            return []
+
         tokenized_query = tokenize(query)
         if not tokenized_query:
             return []
@@ -75,4 +80,6 @@ class BM25Searcher:
         indexed_scores.sort(key=lambda x: x[1], reverse=True)
 
         # Return top-k results
+        if k <= 0:
+            return []
         return indexed_scores[:k]
