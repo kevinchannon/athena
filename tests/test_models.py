@@ -10,6 +10,7 @@ from athena.models import (
     ModuleInfo,
     PackageInfo,
     Parameter,
+    SearchResult,
     Signature,
 )
 
@@ -344,3 +345,50 @@ def test_entity_status_module_no_extent():
     )
 
     assert status.extent == ""
+
+
+def test_search_result_creation():
+    location = Location(start=10, end=25)
+    result = SearchResult(
+        kind="function",
+        path="src/auth.py",
+        extent=location,
+        summary="Validates JWT token and returns user object."
+    )
+
+    assert result.kind == "function"
+    assert result.path == "src/auth.py"
+    assert result.extent == location
+    assert result.summary == "Validates JWT token and returns user object."
+
+
+def test_search_result_to_dict():
+    location = Location(start=15, end=30)
+    result = SearchResult(
+        kind="class",
+        path="src/models.py",
+        extent=location,
+        summary="User authentication model."
+    )
+
+    result_dict = asdict(result)
+
+    assert result_dict == {
+        "kind": "class",
+        "path": "src/models.py",
+        "extent": {"start": 15, "end": 30},
+        "summary": "User authentication model."
+    }
+
+
+def test_search_result_multiline_summary():
+    location = Location(start=5, end=20)
+    result = SearchResult(
+        kind="method",
+        path="src/service.py",
+        extent=location,
+        summary="Process user request.\n\nThis method handles authentication and validation."
+    )
+
+    assert result.summary == "Process user request.\n\nThis method handles authentication and validation."
+    assert "\n\n" in result.summary
