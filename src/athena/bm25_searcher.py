@@ -85,4 +85,6 @@ class BM25Searcher:
 
         # Filter zero/negative scores
         # Use explicit float() conversion to handle numpy types
-        return [(idx, float(score)) for idx, score in top_k if float(score) > 0.0]
+        # Use small epsilon because BM25Plus can return very small scores for matches in single-doc corpus
+        EPSILON = 1e-10
+        return [(idx, float(score)) for idx, score in top_k if float(score) > EPSILON]
