@@ -14,6 +14,8 @@ dependencies = [
     "tree-sitter-python>=0.21.0",
     "mcp>=1.0.0",
     "rich>=14.2.0",
+    "pyyaml>=6.0",
+    "rank-bm25>=0.2.2",
 ]
 
 [project.scripts]
