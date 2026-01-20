@@ -75,12 +75,14 @@ class BM25Searcher:
 
         scores = self.bm25.get_scores(tokenized_query)
 
-        # Create (index, score) pairs and sort by score descending
-        indexed_scores = list(enumerate(scores))
+        # Filter out documents with zero or negative scores (no match)
+        # BM25 returns 0 when none of the query terms appear in the document
+        indexed_scores = [(idx, score) for idx, score in enumerate(scores) if score > 0]
+
+        # Sort by score descending
         indexed_scores.sort(key=lambda x: x[1], reverse=True)
 
-        # Filter out zero scores (no match) and return top-k results
+        # Return top-k results
         if k <= 0:
             return []
-        filtered_results = [(idx, score) for idx, score in indexed_scores[:k] if score > 0]
-        return filtered_results
+        return indexed_scores[:k]

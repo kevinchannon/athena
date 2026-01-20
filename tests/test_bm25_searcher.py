@@ -88,15 +88,14 @@ class TestBM25SearcherSearch:
         # Due to saturation, score_many should be less than 3x score_one
         assert score_many < 3 * score_one
 
-    def test_no_matches_returns_low_scores(self):
-        """Test that no-match queries return low scores."""
+    def test_no_matches_returns_empty(self):
+        """Test that no-match queries return empty results."""
         docs = ["JWT authentication", "User login"]
         searcher = BM25Searcher(docs)
-        results = searcher.search("completely unrelated terms", k=2)
+        results = searcher.search("xyzabc123notfound", k=2)
 
-        # Should still return results but with very low scores
-        assert len(results) == 2
-        assert all(score < 0.1 for _, score in results)
+        # Should return empty list when no terms match
+        assert len(results) == 0
 
     def test_ranking_order(self):
         """Test that results are returned in descending score order."""
@@ -127,14 +126,14 @@ class TestBM25SearcherSearch:
 
     def test_returns_top_k_results(self):
         """Test that search returns exactly k results."""
-        docs = ["doc1", "doc2", "doc3", "doc4", "doc5"]
+        docs = ["doc about auth", "doc about jwt", "doc about login", "doc about user", "doc about session"]
         searcher = BM25Searcher(docs)
         results = searcher.search("doc", k=3)
         assert len(results) == 3
 
     def test_returns_fewer_than_k_if_corpus_smaller(self):
         """Test that search returns fewer results if corpus is smaller than k."""
-        docs = ["doc1", "doc2"]
+        docs = ["doc about auth", "doc about jwt"]
         searcher = BM25Searcher(docs)
         results = searcher.search("doc", k=10)
         assert len(results) == 2

@@ -462,7 +462,7 @@ def bar():
             )
 
             result = subprocess.run(
-                ["uv", "run", "-m", "athena", "search", "--json", "v2 auth"],
+                ["uv", "run", "-m", "athena", "search", "--json", "version 2 authentication"],
                 cwd=repo_root,
                 capture_output=True,
                 text=True
