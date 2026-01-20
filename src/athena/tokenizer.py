@@ -7,28 +7,24 @@ This module provides tokenization functions that handle code identifiers
 import re
 
 
-def _split_camel_case(text: str) -> list[str]:
-    """Split camelCase and PascalCase text into separate words.
+def _split_on_case_transitions(text: str) -> str:
+    """Insert spaces at camelCase boundaries for proper word splitting.
 
-    Args:
-        text: A string that may contain camelCase or PascalCase.
-
-    Returns:
-        List of words extracted from camelCase/PascalCase text.
-
-    Examples:
-        >>> _split_camel_case("handleJwtAuth")
-        ['handle', 'Jwt', 'Auth']
-        >>> _split_camel_case("HTTPSConnection")
-        ['HTTPS', 'Connection']
+    Handles both simple camelCase (aB -> a B) and acronyms (HTTPSConn -> HTTPS Conn).
     """
-    # Split on transitions from lowercase to uppercase
-    # Pattern: lowercase followed by uppercase -> insert boundary
-    result = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
-    # Split on transitions from multiple uppercase to lowercase (for acronyms)
-    # Pattern: uppercase followed by uppercase then lowercase -> insert boundary before last uppercase
-    result = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', result)
-    return result.split()
+    text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+    text = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', text)
+    return text
+
+
+def _extract_alphanumeric_tokens(text: str) -> list[str]:
+    """Extract ASCII alphanumeric sequences, excluding non-ASCII characters."""
+    return re.findall(r'[a-zA-Z0-9]+', text)
+
+
+def _has_camel_case(text: str) -> bool:
+    """Check if text contains camelCase pattern (lowercase followed by uppercase)."""
+    return bool(re.search(r'[a-z][A-Z]', text))
 
 
 def tokenize(text: str) -> list[str]:
@@ -62,23 +58,7 @@ def tokenize(text: str) -> list[str]:
     if not text:
         return []
 
-    # Step 1: Split on underscores, hyphens, whitespace, and common punctuation
-    # Keep alphanumeric sequences together for now
-    tokens = re.findall(r'\w+', text)
-
-    # Step 2: Split each token on camelCase
-    result = []
-    for token in tokens:
-        # Split camelCase if present
-        if re.search(r'[a-z][A-Z]', token):
-            # Has camelCase pattern
-            parts = _split_camel_case(token)
-            result.extend(parts)
-        else:
-            result.append(token)
-
-    # Step 3: Lowercase all tokens
-    result = [t.lower() for t in result]
-
-    # Step 4: Filter empty tokens
-    return [t for t in result if t]
+    text_with_spaces = _split_on_case_transitions(text)
+    tokens = _extract_alphanumeric_tokens(text_with_spaces)
+    lowercased = [t.lower() for t in tokens]
+    return [t for t in lowercased if t]
