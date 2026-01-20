@@ -4,7 +4,7 @@ This module wraps the rank-bm25 library and integrates it with
 athena's code-aware tokenization.
 """
 
-from rank_bm25 import BM25Okapi
+from rank_bm25 import BM25Plus
 
 from athena.tokenizer import tokenize
 
@@ -12,11 +12,11 @@ from athena.tokenizer import tokenize
 class BM25Searcher:
     """BM25 search engine for document ranking.
 
-    Uses BM25Okapi algorithm with code-aware tokenization to rank
+    Uses BM25Plus algorithm with code-aware tokenization to rank
     documents based on query relevance.
 
     Attributes:
-        bm25: BM25Okapi instance for scoring documents.
+        bm25: BM25Plus instance for scoring documents.
     """
 
     def __init__(self, documents: list[str], k1: float = 1.5, b: float = 0.75):
@@ -39,8 +39,8 @@ class BM25Searcher:
             0
         """
         self.tokenized_corpus = [tokenize(doc) for doc in documents]
-        # BM25Okapi can't handle empty corpus, so only initialize if we have documents
-        self.bm25 = BM25Okapi(self.tokenized_corpus, k1=k1, b=b) if documents else None
+        # BM25Plus can't handle empty corpus, so only initialize if we have documents
+        self.bm25 = BM25Plus(self.tokenized_corpus, k1=k1, b=b) if documents else None
 
     def search(self, query: str, k: int = 10) -> list[tuple[int, float]]:
         """Search documents for query and return top-k ranked results.
