@@ -79,7 +79,8 @@ class BM25Searcher:
         indexed_scores = list(enumerate(scores))
         indexed_scores.sort(key=lambda x: x[1], reverse=True)
 
-        # Return top-k results
+        # Filter out zero scores (no match) and return top-k results
         if k <= 0:
             return []
-        return indexed_scores[:k]
+        filtered_results = [(idx, score) for idx, score in indexed_scores[:k] if score > 0]
+        return filtered_results
