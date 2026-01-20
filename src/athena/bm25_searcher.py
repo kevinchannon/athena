@@ -79,12 +79,7 @@ class BM25Searcher:
         indexed_scores = list(enumerate(scores))
         indexed_scores.sort(key=lambda x: x[1], reverse=True)
 
-        # Return top-k results, filtering out scores <= 0
-        # BM25 returns 0 when none of the query terms appear in the document
-        top_k = indexed_scores[:k] if k > 0 else []
-
-        # Filter zero/negative scores
-        # Use explicit float() conversion to handle numpy types
-        # Use small epsilon because BM25Plus can return very small scores for matches in single-doc corpus
-        EPSILON = 1e-10
-        return [(idx, float(score)) for idx, score in top_k if float(score) > EPSILON]
+        # Return top-k results
+        if k <= 0:
+            return []
+        return indexed_scores[:k]
