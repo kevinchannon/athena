@@ -38,8 +38,8 @@ use `athena --help` to see up-to-date information about the available features:
 │ mcp-server      Start the MCP server for Claude Code integration.              │
 │ install-mcp     Install MCP server configuration for Claude Code.              │
 │ sync            Update @athena hash tags in docstrings.                        │
-│ status          Check docstring hash synchronization status.                   │
-│ uninstall-mcp   Remove MCP server configuration from Claude Code.              │
+│ status          Check docstring hash synchronization status.                      │
+│ uninstall-mcp   Remove MCP server configuration from Claude Code.                 │
 ╰────────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -97,8 +97,8 @@ search:
 ```
 
 Once you know where a thing is, then you can ask for info about it:
-```bash
-> athena info src/tasktree/parser.py:get_task
+`> athena info src/tasktree/parser.py:get_task`
+```json
 {
   "method": {
     "name": "Recipe.get_task",
@@ -138,7 +138,8 @@ Athena includes Model Context Protocol (MCP) integration, exposing code navigati
 
 - **`ack_locate`** — Find entity location (file path + line range)
 - **`ack_info`** — Get information about an entity (kind, summary, etc.)
-- **`ack_status`** — Check whether all docstrings are up-to-date with the code they describe 
+- **`ack_status`** — Check whether all docstrings are up-to-date with the code they describe
+- **`ack_search`** – Search for code entities using natural language
 
 ### Installation
 
