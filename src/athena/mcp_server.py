@@ -92,6 +92,29 @@ async def list_tools() -> list[Tool]:
                 "required": ["entity"],
             },
         ),
+        Tool(
+            name="ack_search",
+            description=(
+                "Search the code for entities by using a natural language description or search term. "
+                "Returns JSON array of entities that might match the query"
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "A natural language query term describing what you would like to locate. "
+                            "Examples: 'Where is JWT authentication handled?', "
+                            "'What classes deal with input string validation?', "
+                            "'Is there an existing module that does currency conversions?'"
+                        ),
+                    }
+                },
+                "required": ["query"],
+            },
+        ),
+
     ]
 
 
@@ -107,6 +130,8 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             arguments["entity"],
             arguments.get("recursive", False)
         )
+    elif name == "ack_search":
+        return await _handle_search(arguments["query"])
 
     raise ValueError(f"Unknown tool: {name}")
 
@@ -279,6 +304,78 @@ async def _handle_status(entity: str, recursive: bool) -> list[TextContent]:
             TextContent(
                 type="text",
                 text=f"Error running ack status: {error_msg}",
+            )
+        ]
+    except json.JSONDecodeError as e:
+        return [
+            TextContent(
+                type="text",
+                text=f"Error parsing ack output: {e}",
+            )
+        ]
+    except Exception as e:
+        return [
+            TextContent(
+                type="text",
+                text=f"Unexpected error: {e}",
+            )
+        ]
+
+
+async def _handle_search(query: str) -> list[TextContent]:
+    """Handle ack_search tool calls.
+
+    Args:
+        query: A string to try and match entities in the codebase with
+
+    Returns:
+        List containing a single TextContent with JSON results
+    """
+    try:
+        # Call the CLI tool
+        result = subprocess.run(
+            ["athena", "search", "-j", query],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        # Parse JSON output from CLI
+        entities = json.loads(result.stdout)
+
+        if not entities:
+            return [
+                TextContent(
+                    type="text",
+                    text=f"No entities found with query '{query}'",
+                )
+            ]
+
+        # Format results for Claude Code
+        formatted_results = []
+        for entity in entities:
+            kind = entity["kind"]
+            path = entity["path"]
+            start = entity["extent"]["start"]
+            end = entity["extent"]["end"]
+            summary = entity["summary"]
+            formatted_results.append(
+                f"{kind} '{entity}' found in {path} (lines {start}-{end})\n   Summary:\n{summary}"
+            )
+
+        return [
+            TextContent(
+                type="text",
+                text="\n".join(formatted_results),
+            )
+        ]
+
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.strip() if e.stderr else str(e)
+        return [
+            TextContent(
+                type="text",
+                text=f"Error running ack search: {error_msg}",
             )
         ]
     except json.JSONDecodeError as e:

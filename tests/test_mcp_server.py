@@ -11,7 +11,7 @@ async def test_list_tools():
     # Call the handler function directly
     tools = await mcp_server.list_tools()
 
-    assert len(tools) == 3
+    assert len(tools) == 4
 
     # Check ack_locate tool
     locate_tool = tools[0]
@@ -31,6 +31,11 @@ async def test_list_tools():
     assert "docstring hash" in status_tool.description
     assert "entity" in status_tool.inputSchema["properties"]
     assert "recursive" in status_tool.inputSchema["properties"]
+
+    # Check ack_search tool
+    locate_tool = tools[3]
+    assert locate_tool.name == "ack_search"
+    assert "query" in locate_tool.inputSchema["properties"]
 
 
 @pytest.mark.asyncio
