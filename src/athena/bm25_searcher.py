@@ -38,7 +38,7 @@ class BM25Searcher:
             >>> results[0][0]  # Index of best match
             0
         """
-        self.tokenized_corpus = [tokenize(doc) for doc in documents]
+        self.tokenized_corpus = [[t.lower() for t in tokenize(doc)] for doc in documents]
         # BM25Plus can't handle empty corpus, so only initialize if we have documents
         self.bm25 = BM25Plus(self.tokenized_corpus, k1=k1, b=b) if documents else None
 
