@@ -201,11 +201,15 @@ def search_docstrings(
 
     # Perform BM25 search
     searcher = BM25Searcher(docstrings, k1=config.k1, b=config.b)
-    results = searcher.search(query, k=config.k)
+    results = searcher.search(query.lower(), k=config.k)
+
+    # Filter out zero-score results (no actual matches)
+    # BM25 returns score 0 when none of the query terms appear in the document
+    filtered_results = [(idx, score) for idx, score in results if score > 0]
 
     # Convert to SearchResult objects
     search_results = []
-    for idx, _score in results:
+    for idx, _score in filtered_results:
         kind, path, extent = metadata[idx]
         docstring = docstrings[idx]
         search_results.append(
