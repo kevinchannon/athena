@@ -4,7 +4,9 @@ This module provides efficient docstring-based search functionality using BM25
 ranking algorithm with code-aware tokenization and SQLite-based caching.
 """
 
+import logging
 import os
+import sqlite3
 from pathlib import Path
 
 from athena.bm25_searcher import BM25Searcher
@@ -13,6 +15,8 @@ from athena.config import SearchConfig, load_search_config
 from athena.models import Location, SearchResult
 from athena.parsers.python_parser import PythonParser
 from athena.repository import find_python_files, find_repository_root
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_module_docstring(
@@ -272,6 +276,9 @@ def _scan_repo_with_cache(root: Path, cache_db: CacheDatabase) -> list[tuple[str
 
     Returns:
         List of (kind, path, extent, docstring) tuples for all entities with docstrings.
+
+    Raises:
+        sqlite3.Error: If database operations fail.
     """
     seen_files = []
 
@@ -301,6 +308,33 @@ def _scan_repo_with_cache(root: Path, cache_db: CacheDatabase) -> list[tuple[str
         (kind, path, Location(start=start, end=end), summary)
         for kind, path, start, end, summary in cached_entities
     ]
+
+
+def _scan_repo_without_cache(root: Path) -> list[tuple[str, str, Location, str]]:
+    """Scan repository and parse all entities without caching.
+
+    Fallback method when cache operations fail. Parses all Python files
+    directly without any caching.
+
+    Args:
+        root: Repository root directory.
+
+    Returns:
+        List of (kind, path, extent, docstring) tuples for all entities with docstrings.
+    """
+    entities_with_docs = []
+
+    for py_file in find_python_files(root):
+        try:
+            source_code = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            # Skip unreadable files
+            continue
+
+        relative_path = py_file.relative_to(root).as_posix()
+        entities_with_docs.extend(_parse_file_entities(py_file, source_code, relative_path))
+
+    return entities_with_docs
 
 
 def search_docstrings(
@@ -341,10 +375,15 @@ def search_docstrings(
     if config is None:
         config = load_search_config(root)
 
-    # Get entities with docstrings using SQLite cache
+    # Get entities with docstrings using SQLite cache with fallback
     cache_dir = root / ".athena-cache"
-    with CacheDatabase(cache_dir) as cache_db:
-        entities_with_docs = _scan_repo_with_cache(root, cache_db)
+    try:
+        with CacheDatabase(cache_dir) as cache_db:
+            entities_with_docs = _scan_repo_with_cache(root, cache_db)
+    except (sqlite3.Error, RuntimeError, OSError) as e:
+        # Cache operations failed - fall back to non-cached search
+        logger.warning(f"Cache operations failed ({e}), falling back to non-cached search")
+        entities_with_docs = _scan_repo_without_cache(root)
 
     if not entities_with_docs:
         return []
