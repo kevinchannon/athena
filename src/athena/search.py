@@ -261,6 +261,49 @@ def _process_file_with_cache(
     return []
 
 
+def _scan_repo_with_cache(root: Path, cache_db: CacheDatabase) -> list[tuple[str, str, Location, str]]:
+    """Scan repository and update cache with all entities.
+
+    Scans all Python files in the repository, processes them with cache awareness,
+    and removes stale entries for deleted files.
+
+    Args:
+        root: Repository root directory.
+        cache_db: The cache database instance.
+
+    Returns:
+        List of (kind, path, extent, docstring) tuples for all entities with docstrings.
+    """
+    seen_files = []
+
+    # Scan all Python files and process with cache
+    for py_file in find_python_files(root):
+        try:
+            current_mtime = os.path.getmtime(py_file)
+        except OSError:
+            # Skip files we can't stat
+            continue
+
+        relative_path = py_file.relative_to(root).as_posix()
+        seen_files.append(relative_path)
+
+        # Process file with cache (updates cache if needed)
+        _process_file_with_cache(cache_db, py_file, current_mtime, root)
+
+    # Clean up deleted files from cache
+    cache_db.delete_files_not_in(seen_files)
+
+    # Load all entities from cache for BM25 search
+    cached_entities = cache_db.get_all_entities()
+
+    # Convert from cache format (kind, file_path, start, end, summary)
+    # to search format (kind, path, extent, docstring)
+    return [
+        (kind, path, Location(start=start, end=end), summary)
+        for kind, path, start, end, summary in cached_entities
+    ]
+
+
 def _get_cache_key(root: Path) -> tuple[str, float]:
     """Generate cache key based on repository root and modification time.
 
