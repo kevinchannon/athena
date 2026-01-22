@@ -273,6 +273,28 @@ def test_delete_files_not_in_with_cascading_entities(cache_db):
     assert all_entities[0][1] == "src/file1.py"
 
 
+def test_delete_files_not_in_large_batch(cache_db):
+    """Test deleting files with >999 files to verify chunking logic works correctly."""
+    # Insert 2000 files
+    num_files = 2000
+    for i in range(num_files):
+        cache_db.insert_file(f"src/file{i}.py", 1234567890.0)
+
+    # Keep files 0-1499 (delete files 1500-1999)
+    files_to_keep = [f"src/file{i}.py" for i in range(1500)]
+    cache_db.delete_files_not_in(files_to_keep)
+
+    # Verify that files 0-1499 still exist
+    for i in range(1500):
+        result = cache_db.get_file(f"src/file{i}.py")
+        assert result is not None, f"File {i} should still exist"
+
+    # Verify that files 1500-1999 were deleted
+    for i in range(1500, num_files):
+        result = cache_db.get_file(f"src/file{i}.py")
+        assert result is None, f"File {i} should have been deleted"
+
+
 def test_get_all_entities_empty(cache_db):
     """Test retrieving entities from empty database."""
     entities = cache_db.get_all_entities()

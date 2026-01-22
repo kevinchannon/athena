@@ -176,13 +176,25 @@ class CacheDatabase:
             self.conn.commit()
             return
 
-        # For large repos, batch the deletion in chunks
+        # Query all existing files
+        cursor = self.conn.execute("SELECT file_path FROM files")
+        existing_files = {row[0] for row in cursor.fetchall()}
+
+        # Identify files to delete (those in DB but not in keep list)
+        files_to_keep = set(file_paths)
+        files_to_delete = existing_files - files_to_keep
+
+        if not files_to_delete:
+            return
+
+        # Delete files in chunks to respect SQLite parameter limit
         chunk_size = 999  # SQLite parameter limit
-        for i in range(0, len(file_paths), chunk_size):
-            chunk = file_paths[i:i + chunk_size]
+        files_to_delete_list = list(files_to_delete)
+        for i in range(0, len(files_to_delete_list), chunk_size):
+            chunk = files_to_delete_list[i:i + chunk_size]
             placeholders = ",".join("?" * len(chunk))
             self.conn.execute(
-                f"DELETE FROM files WHERE file_path NOT IN ({placeholders})",
+                f"DELETE FROM files WHERE file_path IN ({placeholders})",
                 chunk
             )
         self.conn.commit()
