@@ -10,7 +10,7 @@ from athena.cache import CacheDatabase
 from athena.config import SearchConfig
 from athena.models import Location, SearchResult
 from athena.repository import RepositoryNotFoundError
-from athena.search import _get_cache_key, _parse_file_entities, _process_file_with_cache, search_docstrings
+from athena.search import _get_cache_key, _parse_file_entities, _process_file_with_cache, _scan_repo_with_cache, search_docstrings
 
 
 class TestParseFileEntities:
@@ -836,3 +836,200 @@ class MyClass:
             # No entities should be cached
             all_cached = cache_db.get_all_entities()
             assert len(all_cached) == 0
+
+
+class TestScanRepoWithCache:
+    """Test suite for _scan_repo_with_cache function."""
+
+    def test_full_scan_creates_cache(self, tmp_path):
+        """Verify full repository scan creates cache entries for all files."""
+        # Create multiple Python files
+        file1 = tmp_path / "file1.py"
+        file1.write_text('''def func1():
+    """Function 1."""
+    pass
+''')
+
+        file2 = tmp_path / "file2.py"
+        file2.write_text('''def func2():
+    """Function 2."""
+    pass
+''')
+
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        file3 = subdir / "file3.py"
+        file3.write_text('''class MyClass:
+    """Class docstring."""
+    pass
+''')
+
+        # Scan repository
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            entities = _scan_repo_with_cache(tmp_path, cache_db)
+
+            # Should return all entities
+            assert len(entities) == 3
+
+            # Verify cache has all files
+            assert cache_db.get_file("file1.py") is not None
+            assert cache_db.get_file("file2.py") is not None
+            assert cache_db.get_file("subdir/file3.py") is not None
+
+            # Verify all entities are in cache
+            all_cached = cache_db.get_all_entities()
+            assert len(all_cached) == 3
+
+    def test_incremental_scan_updates_cache(self, tmp_path):
+        """Verify incremental scan updates only changed files."""
+        # Create initial file
+        file1 = tmp_path / "file1.py"
+        file1.write_text('''def func1():
+    """Function 1."""
+    pass
+''')
+
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            # First scan
+            entities1 = _scan_repo_with_cache(tmp_path, cache_db)
+            assert len(entities1) == 1
+            initial_file = cache_db.get_file("file1.py")
+            assert initial_file is not None
+
+            # Add new file
+            file2 = tmp_path / "file2.py"
+            file2.write_text('''def func2():
+    """Function 2."""
+    pass
+''')
+
+            # Second scan
+            entities2 = _scan_repo_with_cache(tmp_path, cache_db)
+            assert len(entities2) == 2
+
+            # Both files should be in cache
+            assert cache_db.get_file("file1.py") is not None
+            assert cache_db.get_file("file2.py") is not None
+
+            # Cache should have both entities
+            all_cached = cache_db.get_all_entities()
+            assert len(all_cached) == 2
+
+    def test_deleted_file_removed_from_cache(self, tmp_path):
+        """Verify deleted files are removed from cache."""
+        # Create two files
+        file1 = tmp_path / "file1.py"
+        file1.write_text('''def func1():
+    """Function 1."""
+    pass
+''')
+
+        file2 = tmp_path / "file2.py"
+        file2.write_text('''def func2():
+    """Function 2."""
+    pass
+''')
+
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            # First scan (both files)
+            entities1 = _scan_repo_with_cache(tmp_path, cache_db)
+            assert len(entities1) == 2
+
+            # Delete file2
+            file2.unlink()
+
+            # Second scan (only file1 remains)
+            entities2 = _scan_repo_with_cache(tmp_path, cache_db)
+            assert len(entities2) == 1
+
+            # Only file1 should be in cache
+            assert cache_db.get_file("file1.py") is not None
+            assert cache_db.get_file("file2.py") is None
+
+            # Cache should only have file1's entity
+            all_cached = cache_db.get_all_entities()
+            assert len(all_cached) == 1
+            assert all_cached[0][1] == "file1.py"  # file_path field
+
+    def test_modified_file_updates_entities(self, tmp_path):
+        """Verify modified file triggers entity update in cache."""
+        file1 = tmp_path / "file1.py"
+        file1.write_text('''def old_func():
+    """Old function."""
+    pass
+''')
+
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            # First scan
+            entities1 = _scan_repo_with_cache(tmp_path, cache_db)
+            assert len(entities1) == 1
+            assert entities1[0][3] == "Old function."
+
+            # Modify file
+            import time
+            time.sleep(0.01)  # Ensure mtime changes
+            file1.write_text('''def new_func():
+    """New function."""
+    pass
+''')
+
+            # Second scan
+            entities2 = _scan_repo_with_cache(tmp_path, cache_db)
+            assert len(entities2) == 1
+            assert entities2[0][3] == "New function."
+
+            # Cache should have updated entity
+            all_cached = cache_db.get_all_entities()
+            assert len(all_cached) == 1
+            assert all_cached[0][4] == "New function."  # summary field
+
+    def test_empty_repository(self, tmp_path):
+        """Verify empty repository returns empty results."""
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            entities = _scan_repo_with_cache(tmp_path, cache_db)
+            assert entities == []
+            all_cached = cache_db.get_all_entities()
+            assert len(all_cached) == 0
+
+    def test_scan_with_unreadable_files(self, tmp_path):
+        """Verify scan handles unreadable files gracefully."""
+        # Create one readable file
+        file1 = tmp_path / "file1.py"
+        file1.write_text('''def func1():
+    """Function 1."""
+    pass
+''')
+
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            # Scan should complete without error
+            entities = _scan_repo_with_cache(tmp_path, cache_db)
+            assert len(entities) == 1
+            assert entities[0][3] == "Function 1."
+
+    def test_entities_format_conversion(self, tmp_path):
+        """Verify entity format conversion from cache to search format."""
+        file1 = tmp_path / "file1.py"
+        file1.write_text('''def my_func():
+    """Test function."""
+    pass
+''')
+
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            entities = _scan_repo_with_cache(tmp_path, cache_db)
+
+            # Verify format: (kind, path, Location, docstring)
+            assert len(entities) == 1
+            kind, path, extent, docstring = entities[0]
+            assert kind == "function"
+            assert path == "file1.py"
+            assert isinstance(extent, Location)
+            assert extent.start >= 0
+            assert extent.end >= extent.start
+            assert docstring == "Test function."
