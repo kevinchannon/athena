@@ -10,7 +10,7 @@ from athena.cache import CacheDatabase
 from athena.config import SearchConfig
 from athena.models import Location, SearchResult
 from athena.repository import RepositoryNotFoundError
-from athena.search import _get_cache_key, _parse_file_entities, _process_file_with_cache, _scan_repo_with_cache, search_docstrings
+from athena.search import _parse_file_entities, _process_file_with_cache, _scan_repo_with_cache, search_docstrings
 
 
 class TestParseFileEntities:
@@ -1033,3 +1033,174 @@ class TestScanRepoWithCache:
             assert extent.start >= 0
             assert extent.end >= extent.start
             assert docstring == "Test function."
+
+
+class TestSearchWithSQLiteCache:
+    """Integration tests for search_docstrings with SQLite cache."""
+
+    def test_search_with_cache_first_run(self, tmp_path):
+        """Verify search works on first run (cache miss)."""
+        # Create a test repository
+        (tmp_path / ".git").mkdir()
+        test_file = tmp_path / "test.py"
+        test_file.write_text('''def authenticate_user():
+    """Authenticate user with JWT token."""
+    pass
+
+def process_payment():
+    """Process payment transaction."""
+    pass
+''')
+
+        # Perform search
+        results = search_docstrings("authentication", root=tmp_path)
+
+        # Should find the authenticate_user function
+        assert len(results) == 1
+        assert results[0].kind == "function"
+        assert results[0].path == "test.py"
+        assert "JWT token" in results[0].summary
+
+        # Verify cache was created
+        cache_dir = tmp_path / ".athena-cache"
+        assert cache_dir.exists()
+        assert (cache_dir / "docstring_cache.db").exists()
+
+    def test_search_with_cache_second_run(self, tmp_path):
+        """Verify search uses cache on second run (cache hit)."""
+        # Create a test repository
+        (tmp_path / ".git").mkdir()
+        test_file = tmp_path / "test.py"
+        test_file.write_text('''def authenticate_user():
+    """Authenticate user with JWT token."""
+    pass
+''')
+
+        # First search (cache miss)
+        results1 = search_docstrings("authentication", root=tmp_path)
+        assert len(results1) == 1
+
+        # Second search (cache hit - should be faster)
+        results2 = search_docstrings("authentication", root=tmp_path)
+        assert len(results2) == 1
+        assert results1[0].path == results2[0].path
+        assert results1[0].summary == results2[0].summary
+
+    def test_search_cache_invalidation_on_file_change(self, tmp_path):
+        """Verify cache invalidates when file is modified."""
+        # Create a test repository
+        (tmp_path / ".git").mkdir()
+        test_file = tmp_path / "test.py"
+        test_file.write_text('''def old_function():
+    """Old function docstring."""
+    pass
+''')
+
+        # First search
+        results1 = search_docstrings("old function", root=tmp_path)
+        assert len(results1) == 1
+        assert "Old function" in results1[0].summary
+
+        # Modify file
+        import time
+        time.sleep(0.01)  # Ensure mtime changes
+        test_file.write_text('''def new_function():
+    """New function docstring."""
+    pass
+''')
+
+        # Search again - should find new function
+        results2 = search_docstrings("new function", root=tmp_path)
+        assert len(results2) == 1
+        assert "New function" in results2[0].summary
+
+        # Old function should not be found
+        results3 = search_docstrings("old function", root=tmp_path)
+        assert len(results3) == 0
+
+    def test_search_handles_deleted_files(self, tmp_path):
+        """Verify cache handles deleted files correctly."""
+        # Create a test repository
+        (tmp_path / ".git").mkdir()
+        file1 = tmp_path / "file1.py"
+        file2 = tmp_path / "file2.py"
+        file1.write_text('''def func1():
+    """Function in file1."""
+    pass
+''')
+        file2.write_text('''def func2():
+    """Function in file2."""
+    pass
+''')
+
+        # First search - should find both
+        results1 = search_docstrings("function", root=tmp_path)
+        assert len(results1) == 2
+
+        # Delete file2
+        file2.unlink()
+
+        # Search again - should only find file1
+        results2 = search_docstrings("function", root=tmp_path)
+        assert len(results2) == 1
+        assert results2[0].path == "file1.py"
+
+    def test_search_with_multiple_files(self, tmp_path):
+        """Verify search works across multiple files."""
+        # Create a test repository
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "auth.py").write_text('''def login():
+    """User login with credentials."""
+    pass
+
+def logout():
+    """User logout and session cleanup."""
+    pass
+''')
+        (tmp_path / "payment.py").write_text('''def process_payment():
+    """Process credit card payment."""
+    pass
+
+def refund_payment():
+    """Process payment refund."""
+    pass
+''')
+
+        # Search for "payment"
+        results = search_docstrings("payment", root=tmp_path)
+        assert len(results) == 2
+        paths = {r.path for r in results}
+        assert "payment.py" in paths
+
+    def test_search_preserves_existing_behavior(self, tmp_path):
+        """Verify search results match expected format."""
+        # Create a test repository
+        (tmp_path / ".git").mkdir()
+        test_file = tmp_path / "module.py"
+        test_file.write_text('''"""Module for authentication."""
+
+class Authenticator:
+    """Handles user authentication."""
+
+    def login(self):
+        """Login user with credentials."""
+        pass
+''')
+
+        # Perform search
+        results = search_docstrings("authentication", root=tmp_path)
+
+        # Should find module and class
+        assert len(results) >= 2
+        kinds = {r.kind for r in results}
+        assert "module" in kinds or "class" in kinds
+
+        # Verify result format
+        for result in results:
+            assert isinstance(result, SearchResult)
+            assert isinstance(result.kind, str)
+            assert isinstance(result.path, str)
+            assert isinstance(result.extent, Location)
+            assert isinstance(result.summary, str)
+            assert result.extent.start >= 0
+            assert result.extent.end >= result.extent.start

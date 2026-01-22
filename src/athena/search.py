@@ -1,10 +1,9 @@
 """BM25-based docstring search for code navigation.
 
 This module provides efficient docstring-based search functionality using BM25
-ranking algorithm with code-aware tokenization and in-memory caching.
+ranking algorithm with code-aware tokenization and SQLite-based caching.
 """
 
-import functools
 import os
 from pathlib import Path
 
@@ -304,63 +303,6 @@ def _scan_repo_with_cache(root: Path, cache_db: CacheDatabase) -> list[tuple[str
     ]
 
 
-def _get_cache_key(root: Path) -> tuple[str, float]:
-    """Generate cache key based on repository root and modification time.
-
-    Args:
-        root: Repository root directory.
-
-    Returns:
-        Tuple of (root_path_string, max_modification_time).
-    """
-    root_str = str(root)
-    max_mtime = 0.0
-
-    # Find the latest modification time across all Python files
-    for py_file in find_python_files(root):
-        try:
-            mtime = os.path.getmtime(py_file)
-            max_mtime = max(max_mtime, mtime)
-        except OSError:
-            # If we can't get mtime, invalidate cache by using current time
-            return (root_str, float("inf"))
-
-    return (root_str, max_mtime)
-
-
-@functools.lru_cache(maxsize=8)
-def _extract_entities_with_docstrings(cache_key: tuple[str, float]) -> list[tuple[str, str, Location, str]]:
-    """Extract all entities with docstrings from repository (cached).
-
-    This function is cached based on repository root and modification time.
-    Cache invalidates when any Python file in the repository changes.
-
-    Args:
-        cache_key: Tuple of (root_path_string, max_modification_time).
-
-    Returns:
-        List of (kind, path, extent, docstring) tuples for entities with docstrings.
-    """
-    root = Path(cache_key[0])
-    entities_with_docs = []
-
-    for py_file in find_python_files(root):
-        try:
-            source_code = py_file.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            # Skip files that can't be read
-            continue
-
-        # Get relative path
-        relative_path = py_file.relative_to(root).as_posix()
-
-        # Parse file and collect entities
-        file_entities = _parse_file_entities(py_file, source_code, relative_path)
-        entities_with_docs.extend(file_entities)
-
-    return entities_with_docs
-
-
 def search_docstrings(
     query: str,
     root: Path | None = None,
@@ -399,9 +341,10 @@ def search_docstrings(
     if config is None:
         config = load_search_config(root)
 
-    # Get cached entities with docstrings
-    cache_key = _get_cache_key(root)
-    entities_with_docs = _extract_entities_with_docstrings(cache_key)
+    # Get entities with docstrings using SQLite cache
+    cache_dir = root / ".athena-cache"
+    with CacheDatabase(cache_dir) as cache_db:
+        entities_with_docs = _scan_repo_with_cache(root, cache_db)
 
     if not entities_with_docs:
         return []
