@@ -201,7 +201,6 @@ def _process_file_with_cache(
     cached_file = cache_db.get_file(relative_path)
 
     if cached_file is None:
-        # File not in cache - parse and insert
         try:
             source_code = file_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -230,7 +229,6 @@ def _process_file_with_cache(
     file_id, cached_mtime = cached_file
 
     if current_mtime != cached_mtime:
-        # File has changed - reparse and update
         try:
             source_code = file_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
