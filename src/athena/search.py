@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 from athena.bm25_searcher import BM25Searcher
+from athena.cache import CacheDatabase, CachedEntity
 from athena.config import SearchConfig, load_search_config
 from athena.models import Location, SearchResult
 from athena.parsers.python_parser import PythonParser
@@ -172,6 +173,94 @@ def _parse_file_entities(file_path: Path, source_code: str, relative_path: str) 
             ))
 
     return entities_with_docs
+
+
+def _process_file_with_cache(
+    cache_db: CacheDatabase,
+    file_path: Path,
+    current_mtime: float,
+    root: Path
+) -> list[tuple[str, str, Location, str]]:
+    """Process a file with cache awareness.
+
+    Checks if the file is in cache and up-to-date. If not, parses the file
+    and updates the cache. Returns the entities for the file.
+
+    Args:
+        cache_db: The cache database instance.
+        file_path: Absolute path to the Python file.
+        current_mtime: Current modification time of the file.
+        root: Repository root for computing relative path.
+
+    Returns:
+        List of (kind, path, extent, docstring) tuples for entities with docstrings.
+    """
+    relative_path = file_path.relative_to(root).as_posix()
+
+    # Check if file exists in cache
+    cached_file = cache_db.get_file(relative_path)
+
+    if cached_file is None:
+        # File not in cache - parse and insert
+        try:
+            source_code = file_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return []
+
+        entities = _parse_file_entities(file_path, source_code, relative_path)
+
+        # Insert file and entities into cache
+        file_id = cache_db.insert_file(relative_path, current_mtime)
+        cached_entities = [
+            CachedEntity(
+                file_id=file_id,
+                kind=kind,
+                name=relative_path,  # Using path as name for now
+                entity_path=path,
+                start=extent.start,
+                end=extent.end,
+                summary=docstring
+            )
+            for kind, path, extent, docstring in entities
+        ]
+        cache_db.insert_entities(file_id, cached_entities)
+
+        return entities
+
+    file_id, cached_mtime = cached_file
+
+    if current_mtime != cached_mtime:
+        # File has changed - reparse and update
+        try:
+            source_code = file_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return []
+
+        entities = _parse_file_entities(file_path, source_code, relative_path)
+
+        # Delete old entities and insert new ones
+        cache_db.delete_entities_for_file(file_id)
+        cached_entities = [
+            CachedEntity(
+                file_id=file_id,
+                kind=kind,
+                name=relative_path,
+                entity_path=path,
+                start=extent.start,
+                end=extent.end,
+                summary=docstring
+            )
+            for kind, path, extent, docstring in entities
+        ]
+        cache_db.insert_entities(file_id, cached_entities)
+        cache_db.update_file_mtime(file_id, current_mtime)
+
+        return entities
+
+    # File is up-to-date in cache - no need to parse
+    # We don't return cached entities here since we'll load all entities
+    # at once in the next phase for BM25 search
+    return []
 
 
 def _get_cache_key(root: Path) -> tuple[str, float]:

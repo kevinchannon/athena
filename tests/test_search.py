@@ -6,10 +6,11 @@ from unittest.mock import patch
 
 import pytest
 
+from athena.cache import CacheDatabase
 from athena.config import SearchConfig
 from athena.models import Location, SearchResult
 from athena.repository import RepositoryNotFoundError
-from athena.search import _get_cache_key, _parse_file_entities, search_docstrings
+from athena.search import _get_cache_key, _parse_file_entities, _process_file_with_cache, search_docstrings
 
 
 class TestParseFileEntities:
@@ -650,3 +651,188 @@ class MyClass:
         # Should complete in under 1 second (spec says <100ms, but allow overhead)
         assert elapsed < 1.0
         assert len(results) > 0
+
+
+class TestProcessFileWithCache:
+    """Test suite for _process_file_with_cache function."""
+
+    def test_cache_miss_parses_and_inserts(self, tmp_path):
+        """Verify cache miss triggers parsing and database insertion."""
+        # Create a Python file with a function
+        file_path = tmp_path / "test.py"
+        source_code = '''def my_function():
+    """Test function."""
+    pass
+'''
+        file_path.write_text(source_code)
+        current_mtime = file_path.stat().st_mtime
+
+        # Create cache database
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            # Process file (cache miss)
+            entities = _process_file_with_cache(cache_db, file_path, current_mtime, tmp_path)
+
+            # Should return parsed entities
+            assert len(entities) == 1
+            kind, path, extent, docstring = entities[0]
+            assert kind == "function"
+            assert path == "test.py"
+            assert docstring == "Test function."
+
+            # Verify file was added to cache
+            cached_file = cache_db.get_file("test.py")
+            assert cached_file is not None
+            file_id, cached_mtime = cached_file
+            assert cached_mtime == current_mtime
+
+            # Verify entities were added to cache
+            all_entities = cache_db.get_all_entities()
+            assert len(all_entities) == 1
+
+    def test_cache_hit_no_reparse(self, tmp_path):
+        """Verify cache hit avoids reparsing when mtime matches."""
+        # Create a Python file
+        file_path = tmp_path / "test.py"
+        source_code = '''def my_function():
+    """Test function."""
+    pass
+'''
+        file_path.write_text(source_code)
+        current_mtime = file_path.stat().st_mtime
+
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            # First process (cache miss)
+            entities_first = _process_file_with_cache(cache_db, file_path, current_mtime, tmp_path)
+            assert len(entities_first) == 1
+
+            # Second process with same mtime (cache hit)
+            entities_second = _process_file_with_cache(cache_db, file_path, current_mtime, tmp_path)
+
+            # Should return empty list since file is cached and up-to-date
+            assert entities_second == []
+
+            # Verify cache still has the entity
+            all_entities = cache_db.get_all_entities()
+            assert len(all_entities) == 1
+
+    def test_mtime_change_triggers_reparse(self, tmp_path):
+        """Verify mtime change triggers reparsing and cache update."""
+        # Create a Python file
+        file_path = tmp_path / "test.py"
+        source_code_v1 = '''def old_function():
+    """Old function."""
+    pass
+'''
+        file_path.write_text(source_code_v1)
+        mtime_v1 = file_path.stat().st_mtime
+
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            # First process
+            entities_v1 = _process_file_with_cache(cache_db, file_path, mtime_v1, tmp_path)
+            assert len(entities_v1) == 1
+            assert entities_v1[0][3] == "Old function."
+
+            # Modify file
+            source_code_v2 = '''def new_function():
+    """New function."""
+    pass
+'''
+            file_path.write_text(source_code_v2)
+            mtime_v2 = file_path.stat().st_mtime + 1.0  # Simulate time passing
+
+            # Second process with different mtime
+            entities_v2 = _process_file_with_cache(cache_db, file_path, mtime_v2, tmp_path)
+
+            # Should return new parsed entities
+            assert len(entities_v2) == 1
+            assert entities_v2[0][3] == "New function."
+
+            # Verify cache was updated
+            cached_file = cache_db.get_file("test.py")
+            assert cached_file is not None
+            file_id, cached_mtime = cached_file
+            assert cached_mtime == mtime_v2
+
+            # Verify old entities were replaced
+            all_entities = cache_db.get_all_entities()
+            assert len(all_entities) == 1
+            assert all_entities[0][4] == "New function."
+
+    def test_unreadable_file_returns_empty(self, tmp_path):
+        """Verify unreadable file returns empty list."""
+        # Create a file path that doesn't exist
+        file_path = tmp_path / "nonexistent.py"
+        current_mtime = 12345.0
+
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            entities = _process_file_with_cache(cache_db, file_path, current_mtime, tmp_path)
+            assert entities == []
+
+            # Verify nothing was added to cache
+            assert cache_db.get_file("nonexistent.py") is None
+
+    def test_multiple_entities_in_file(self, tmp_path):
+        """Verify processing file with multiple entities."""
+        file_path = tmp_path / "multi.py"
+        source_code = '''"""Module docstring."""
+
+def func1():
+    """Function 1."""
+    pass
+
+def func2():
+    """Function 2."""
+    pass
+
+class MyClass:
+    """Class docstring."""
+    pass
+'''
+        file_path.write_text(source_code)
+        current_mtime = file_path.stat().st_mtime
+
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            entities = _process_file_with_cache(cache_db, file_path, current_mtime, tmp_path)
+
+            # Should return all entities
+            assert len(entities) == 4
+            kinds = [e[0] for e in entities]
+            assert "module" in kinds
+            assert kinds.count("function") == 2
+            assert "class" in kinds
+
+            # Verify all entities were cached
+            all_cached = cache_db.get_all_entities()
+            assert len(all_cached) == 4
+
+    def test_file_without_docstrings(self, tmp_path):
+        """Verify processing file with no docstrings."""
+        file_path = tmp_path / "nodocs.py"
+        source_code = '''def func():
+    pass
+
+class MyClass:
+    pass
+'''
+        file_path.write_text(source_code)
+        current_mtime = file_path.stat().st_mtime
+
+        cache_dir = tmp_path / ".athena-cache"
+        with CacheDatabase(cache_dir) as cache_db:
+            entities = _process_file_with_cache(cache_db, file_path, current_mtime, tmp_path)
+
+            # Should return empty list (no docstrings)
+            assert entities == []
+
+            # File should still be tracked in cache
+            cached_file = cache_db.get_file("nodocs.py")
+            assert cached_file is not None
+
+            # No entities should be cached
+            all_cached = cache_db.get_all_entities()
+            assert len(all_cached) == 0
