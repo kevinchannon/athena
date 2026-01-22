@@ -15,6 +15,105 @@ from athena.parsers.python_parser import PythonParser
 from athena.repository import find_python_files, find_repository_root
 
 
+def _parse_file_entities(file_path: Path, source_code: str, relative_path: str) -> list[tuple[str, str, Location, str]]:
+    """Parse entities with docstrings from a single Python file.
+
+    Args:
+        file_path: Path to the Python file.
+        source_code: The source code content of the file.
+        relative_path: Path relative to repository root (as POSIX string).
+
+    Returns:
+        List of (kind, path, extent, docstring) tuples for entities with docstrings.
+        Empty list if no entities with docstrings found.
+    """
+    parser = PythonParser()
+    entities_with_docs = []
+
+    # Parse and extract entities
+    tree = parser.parser.parse(bytes(source_code, "utf8"))
+    root_node = tree.root_node
+
+    # Extract module-level docstring
+    module_docstring = parser._extract_docstring(root_node, source_code)
+    if module_docstring:
+        lines = source_code.splitlines()
+        extent = Location(start=0, end=len(lines) - 1 if lines else 0)
+        entities_with_docs.append(("module", relative_path, extent, module_docstring))
+
+    # Extract functions, classes, and methods with their docstrings
+    for child in root_node.children:
+        func_node = None
+        class_node = None
+        extent_node = None
+
+        # Handle direct function definitions
+        if child.type == "function_definition":
+            func_node = child
+            extent_node = child
+        # Handle decorated definitions
+        elif child.type == "decorated_definition":
+            for subchild in child.children:
+                if subchild.type == "function_definition":
+                    func_node = subchild
+                    extent_node = child
+                elif subchild.type == "class_definition":
+                    class_node = subchild
+                    extent_node = child
+        # Handle direct class definitions
+        elif child.type == "class_definition":
+            class_node = child
+            extent_node = child
+
+        # Process function
+        if func_node:
+            name_node = func_node.child_by_field_name("name")
+            if name_node:
+                docstring = parser._extract_docstring(func_node, source_code)
+                if docstring:
+                    start_line = extent_node.start_point[0]
+                    end_line = extent_node.end_point[0]
+                    extent = Location(start=start_line, end=end_line)
+                    entities_with_docs.append(("function", relative_path, extent, docstring))
+
+        # Process class and its methods
+        if class_node:
+            # Extract class docstring
+            class_docstring = parser._extract_docstring(class_node, source_code)
+            if class_docstring:
+                start_line = extent_node.start_point[0]
+                end_line = extent_node.end_point[0]
+                extent = Location(start=start_line, end=end_line)
+                entities_with_docs.append(("class", relative_path, extent, class_docstring))
+
+            # Extract methods from class body
+            body = class_node.child_by_field_name("body")
+            if body:
+                for item in body.children:
+                    method_node = None
+                    method_extent_node = None
+
+                    if item.type == "function_definition":
+                        method_node = item
+                        method_extent_node = item
+                    elif item.type == "decorated_definition":
+                        for subitem in item.children:
+                            if subitem.type == "function_definition":
+                                method_node = subitem
+                                method_extent_node = item
+                                break
+
+                    if method_node:
+                        docstring = parser._extract_docstring(method_node, source_code)
+                        if docstring:
+                            start_line = method_extent_node.start_point[0]
+                            end_line = method_extent_node.end_point[0]
+                            extent = Location(start=start_line, end=end_line)
+                            entities_with_docs.append(("method", relative_path, extent, docstring))
+
+    return entities_with_docs
+
+
 def _get_cache_key(root: Path) -> tuple[str, float]:
     """Generate cache key based on repository root and modification time.
 
@@ -53,7 +152,6 @@ def _extract_entities_with_docstrings(cache_key: tuple[str, float]) -> list[tupl
         List of (kind, path, extent, docstring) tuples for entities with docstrings.
     """
     root = Path(cache_key[0])
-    parser = PythonParser()
     entities_with_docs = []
 
     for py_file in find_python_files(root):
@@ -66,86 +164,9 @@ def _extract_entities_with_docstrings(cache_key: tuple[str, float]) -> list[tupl
         # Get relative path
         relative_path = py_file.relative_to(root).as_posix()
 
-        # Parse and extract entities
-        tree = parser.parser.parse(bytes(source_code, "utf8"))
-        root_node = tree.root_node
-
-        # Extract module-level docstring
-        module_docstring = parser._extract_docstring(root_node, source_code)
-        if module_docstring:
-            lines = source_code.splitlines()
-            extent = Location(start=0, end=len(lines) - 1 if lines else 0)
-            entities_with_docs.append(("module", relative_path, extent, module_docstring))
-
-        # Extract functions, classes, and methods with their docstrings
-        for child in root_node.children:
-            func_node = None
-            class_node = None
-            extent_node = None
-
-            # Handle direct function definitions
-            if child.type == "function_definition":
-                func_node = child
-                extent_node = child
-            # Handle decorated definitions
-            elif child.type == "decorated_definition":
-                for subchild in child.children:
-                    if subchild.type == "function_definition":
-                        func_node = subchild
-                        extent_node = child
-                    elif subchild.type == "class_definition":
-                        class_node = subchild
-                        extent_node = child
-            # Handle direct class definitions
-            elif child.type == "class_definition":
-                class_node = child
-                extent_node = child
-
-            # Process function
-            if func_node:
-                name_node = func_node.child_by_field_name("name")
-                if name_node:
-                    docstring = parser._extract_docstring(func_node, source_code)
-                    if docstring:
-                        start_line = extent_node.start_point[0]
-                        end_line = extent_node.end_point[0]
-                        extent = Location(start=start_line, end=end_line)
-                        entities_with_docs.append(("function", relative_path, extent, docstring))
-
-            # Process class and its methods
-            if class_node:
-                # Extract class docstring
-                class_docstring = parser._extract_docstring(class_node, source_code)
-                if class_docstring:
-                    start_line = extent_node.start_point[0]
-                    end_line = extent_node.end_point[0]
-                    extent = Location(start=start_line, end=end_line)
-                    entities_with_docs.append(("class", relative_path, extent, class_docstring))
-
-                # Extract methods from class body
-                body = class_node.child_by_field_name("body")
-                if body:
-                    for item in body.children:
-                        method_node = None
-                        method_extent_node = None
-
-                        if item.type == "function_definition":
-                            method_node = item
-                            method_extent_node = item
-                        elif item.type == "decorated_definition":
-                            for subitem in item.children:
-                                if subitem.type == "function_definition":
-                                    method_node = subitem
-                                    method_extent_node = item
-                                    break
-
-                        if method_node:
-                            docstring = parser._extract_docstring(method_node, source_code)
-                            if docstring:
-                                start_line = method_extent_node.start_point[0]
-                                end_line = method_extent_node.end_point[0]
-                                extent = Location(start=start_line, end=end_line)
-                                entities_with_docs.append(("method", relative_path, extent, docstring))
+        # Parse file and collect entities
+        file_entities = _parse_file_entities(py_file, source_code, relative_path)
+        entities_with_docs.extend(file_entities)
 
     return entities_with_docs
 

@@ -9,7 +9,197 @@ import pytest
 from athena.config import SearchConfig
 from athena.models import Location, SearchResult
 from athena.repository import RepositoryNotFoundError
-from athena.search import _get_cache_key, search_docstrings
+from athena.search import _get_cache_key, _parse_file_entities, search_docstrings
+
+
+class TestParseFileEntities:
+    """Test suite for _parse_file_entities function."""
+
+    def test_parse_module_docstring(self, tmp_path):
+        """Verify parsing extracts module-level docstring."""
+        file_path = tmp_path / "module.py"
+        source_code = '"""Module docstring."""\n'
+
+        entities = _parse_file_entities(file_path, source_code, "module.py")
+
+        assert len(entities) == 1
+        kind, path, extent, docstring = entities[0]
+        assert kind == "module"
+        assert path == "module.py"
+        assert extent.start == 0
+        assert docstring == "Module docstring."
+
+    def test_parse_function_docstring(self, tmp_path):
+        """Verify parsing extracts function docstring."""
+        file_path = tmp_path / "func.py"
+        source_code = '''def my_function():
+    """Function docstring."""
+    pass
+'''
+
+        entities = _parse_file_entities(file_path, source_code, "func.py")
+
+        assert len(entities) == 1
+        kind, path, extent, docstring = entities[0]
+        assert kind == "function"
+        assert path == "func.py"
+        assert extent.start == 0
+        assert extent.end > extent.start
+        assert docstring == "Function docstring."
+
+    def test_parse_class_docstring(self, tmp_path):
+        """Verify parsing extracts class docstring."""
+        file_path = tmp_path / "cls.py"
+        source_code = '''class MyClass:
+    """Class docstring."""
+    pass
+'''
+
+        entities = _parse_file_entities(file_path, source_code, "cls.py")
+
+        assert len(entities) == 1
+        kind, path, extent, docstring = entities[0]
+        assert kind == "class"
+        assert path == "cls.py"
+        assert docstring == "Class docstring."
+
+    def test_parse_method_docstring(self, tmp_path):
+        """Verify parsing extracts method docstring."""
+        file_path = tmp_path / "method.py"
+        source_code = '''class MyClass:
+    """Class docstring."""
+
+    def my_method(self):
+        """Method docstring."""
+        pass
+'''
+
+        entities = _parse_file_entities(file_path, source_code, "method.py")
+
+        # Should find class and method
+        assert len(entities) == 2
+        kinds = {e[0] for e in entities}
+        assert "class" in kinds
+        assert "method" in kinds
+
+        method_entity = [e for e in entities if e[0] == "method"][0]
+        assert method_entity[3] == "Method docstring."
+
+    def test_parse_decorated_function(self, tmp_path):
+        """Verify parsing handles decorated functions."""
+        file_path = tmp_path / "decorated.py"
+        source_code = '''@decorator
+def my_function():
+    """Decorated function."""
+    pass
+'''
+
+        entities = _parse_file_entities(file_path, source_code, "decorated.py")
+
+        assert len(entities) == 1
+        kind, path, extent, docstring = entities[0]
+        assert kind == "function"
+        assert docstring == "Decorated function."
+        # Extent should include decorator
+        assert extent.start == 0
+
+    def test_parse_decorated_class(self, tmp_path):
+        """Verify parsing handles decorated classes."""
+        file_path = tmp_path / "decorated.py"
+        source_code = '''@decorator
+class MyClass:
+    """Decorated class."""
+    pass
+'''
+
+        entities = _parse_file_entities(file_path, source_code, "decorated.py")
+
+        assert len(entities) == 1
+        kind, path, extent, docstring = entities[0]
+        assert kind == "class"
+        assert docstring == "Decorated class."
+        # Extent should include decorator
+        assert extent.start == 0
+
+    def test_parse_multiple_entities(self, tmp_path):
+        """Verify parsing finds all entity types in one file."""
+        file_path = tmp_path / "multi.py"
+        source_code = '''"""Module docstring."""
+
+def func():
+    """Function docstring."""
+    pass
+
+class MyClass:
+    """Class docstring."""
+
+    def method(self):
+        """Method docstring."""
+        pass
+'''
+
+        entities = _parse_file_entities(file_path, source_code, "multi.py")
+
+        # Should find module, function, class, and method
+        assert len(entities) == 4
+        kinds = {e[0] for e in entities}
+        assert kinds == {"module", "function", "class", "method"}
+
+    def test_parse_no_docstrings(self, tmp_path):
+        """Verify parsing returns empty list when no docstrings exist."""
+        file_path = tmp_path / "nodocs.py"
+        source_code = '''def func():
+    pass
+
+class MyClass:
+    pass
+'''
+
+        entities = _parse_file_entities(file_path, source_code, "nodocs.py")
+
+        assert entities == []
+
+    def test_parse_multiline_docstring(self, tmp_path):
+        """Verify parsing handles multiline docstrings."""
+        file_path = tmp_path / "multiline.py"
+        source_code = '''"""
+Module with multiline docstring.
+
+This is a longer description.
+"""
+'''
+
+        entities = _parse_file_entities(file_path, source_code, "multiline.py")
+
+        assert len(entities) == 1
+        docstring = entities[0][3]
+        assert "Module with multiline docstring" in docstring
+        assert "longer description" in docstring
+
+    def test_parse_empty_file(self, tmp_path):
+        """Verify parsing handles empty file."""
+        file_path = tmp_path / "empty.py"
+        source_code = ""
+
+        entities = _parse_file_entities(file_path, source_code, "empty.py")
+
+        assert entities == []
+
+    def test_parse_preserves_relative_path(self, tmp_path):
+        """Verify all entities use the provided relative path."""
+        file_path = tmp_path / "subdir" / "module.py"
+        source_code = '''"""Module."""
+
+def func():
+    """Function."""
+    pass
+'''
+
+        entities = _parse_file_entities(file_path, source_code, "subdir/module.py")
+
+        # All entities should have the same relative path
+        for entity in entities:
+            assert entity[1] == "subdir/module.py"
 
 
 class TestSearchDocstrings:
