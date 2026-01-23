@@ -272,7 +272,8 @@ class CacheDatabase:
         """Delete files that are not in the provided list.
 
         This handles cleanup of deleted files. Thanks to ON DELETE CASCADE,
-        associated entities are automatically removed.
+        associated entities are automatically removed. FTS5 entries are
+        explicitly deleted before removing entities.
 
         Args:
             file_paths: List of file paths that should be kept
@@ -287,7 +288,7 @@ class CacheDatabase:
         with self._lock:
             try:
                 if not file_paths:
-                    # Delete all files if list is empty
+                    self.conn.execute("DELETE FROM entities_fts")
                     self.conn.execute("DELETE FROM files")
                     if not self._in_transaction:
                         self.conn.commit()
@@ -310,6 +311,19 @@ class CacheDatabase:
                 for i in range(0, len(files_to_delete_list), chunk_size):
                     chunk = files_to_delete_list[i:i + chunk_size]
                     placeholders = ",".join("?" * len(chunk))
+
+                    self.conn.execute(
+                        f"""
+                        DELETE FROM entities_fts
+                        WHERE entity_id IN (
+                            SELECT e.id FROM entities e
+                            JOIN files f ON e.file_id = f.id
+                            WHERE f.file_path IN ({placeholders})
+                        )
+                        """,
+                        chunk
+                    )
+
                     self.conn.execute(
                         f"DELETE FROM files WHERE file_path IN ({placeholders})",
                         chunk
@@ -384,6 +398,8 @@ class CacheDatabase:
     def delete_entities_for_file(self, file_id: int) -> None:
         """Delete all entities for a specific file.
 
+        Also deletes corresponding FTS5 entries.
+
         Args:
             file_id: ID of the file whose entities should be deleted
 
@@ -396,6 +412,15 @@ class CacheDatabase:
 
         with self._lock:
             try:
+                self.conn.execute(
+                    """
+                    DELETE FROM entities_fts
+                    WHERE entity_id IN (
+                        SELECT id FROM entities WHERE file_id = ?
+                    )
+                    """,
+                    (file_id,)
+                )
                 self.conn.execute("DELETE FROM entities WHERE file_id = ?", (file_id,))
                 if not self._in_transaction:
                     self.conn.commit()
