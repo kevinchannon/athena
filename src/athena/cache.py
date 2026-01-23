@@ -46,6 +46,7 @@ class CacheDatabase:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.cache_dir / "docstring_cache.db"
         self.conn: sqlite3.Connection | None = None
+        self._in_transaction = False
         self._open()
 
     def _open(self) -> None:
@@ -121,6 +122,48 @@ class CacheDatabase:
         """Context manager exit."""
         self.close()
 
+    @contextmanager
+    def transaction(self):
+        """Context manager for explicit transaction control.
+
+        This allows grouping multiple operations into a single transaction,
+        ensuring atomicity and improving performance by reducing commit overhead.
+
+        Usage:
+            with cache_db.transaction():
+                cache_db.delete_entities_for_file(file_id)
+                cache_db.insert_entities(file_id, entities)
+                cache_db.update_file_mtime(file_id, mtime)
+
+        If an exception occurs within the context, the transaction is rolled back.
+        Otherwise, it's committed on successful exit.
+
+        Yields:
+            None
+
+        Raises:
+            RuntimeError: If database connection not initialized.
+            sqlite3.Error: If transaction fails.
+        """
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
+
+        # Track that we're in a transaction to prevent individual commits
+        was_in_transaction = self._in_transaction
+        self._in_transaction = True
+
+        try:
+            yield
+            # Only commit if this is the outermost transaction
+            if not was_in_transaction:
+                self.conn.commit()
+        except Exception as e:
+            logger.error(f"Transaction failed, rolling back: {e}")
+            self.conn.rollback()
+            raise
+        finally:
+            self._in_transaction = was_in_transaction
+
     def insert_file(self, file_path: str, mtime: float) -> int:
         """Insert a new file record.
 
@@ -143,11 +186,13 @@ class CacheDatabase:
                 "INSERT INTO files (file_path, mtime) VALUES (?, ?)",
                 (file_path, mtime)
             )
-            self.conn.commit()
+            if not self._in_transaction:
+                self.conn.commit()
             return cursor.lastrowid
         except sqlite3.Error as e:
             logger.error(f"Failed to insert file {file_path}: {e}")
-            self.conn.rollback()
+            if not self._in_transaction:
+                self.conn.rollback()
             raise
 
     def get_file(self, file_path: str) -> tuple[int, float] | None:
@@ -196,10 +241,12 @@ class CacheDatabase:
                 "UPDATE files SET mtime = ? WHERE id = ?",
                 (mtime, file_id)
             )
-            self.conn.commit()
+            if not self._in_transaction:
+                self.conn.commit()
         except sqlite3.Error as e:
             logger.error(f"Failed to update mtime for file_id {file_id}: {e}")
-            self.conn.rollback()
+            if not self._in_transaction:
+                self.conn.rollback()
             raise
 
     def delete_files_not_in(self, file_paths: list[str]) -> None:
@@ -222,7 +269,8 @@ class CacheDatabase:
             if not file_paths:
                 # Delete all files if list is empty
                 self.conn.execute("DELETE FROM files")
-                self.conn.commit()
+                if not self._in_transaction:
+                    self.conn.commit()
                 return
 
             # Query all existing files
@@ -246,10 +294,12 @@ class CacheDatabase:
                     f"DELETE FROM files WHERE file_path IN ({placeholders})",
                     chunk
                 )
-            self.conn.commit()
+            if not self._in_transaction:
+                self.conn.commit()
         except sqlite3.Error as e:
             logger.error(f"Failed to delete stale files: {e}")
-            self.conn.rollback()
+            if not self._in_transaction:
+                self.conn.rollback()
             raise
 
     def insert_entities(self, file_id: int, entities: list[CachedEntity]) -> None:
@@ -278,10 +328,12 @@ class CacheDatabase:
                 [(file_id, e.kind, e.name, e.entity_path, e.start, e.end, e.summary)
                  for e in entities]
             )
-            self.conn.commit()
+            if not self._in_transaction:
+                self.conn.commit()
         except sqlite3.Error as e:
             logger.error(f"Failed to insert entities for file_id {file_id}: {e}")
-            self.conn.rollback()
+            if not self._in_transaction:
+                self.conn.rollback()
             raise
 
     def delete_entities_for_file(self, file_id: int) -> None:
@@ -299,10 +351,12 @@ class CacheDatabase:
 
         try:
             self.conn.execute("DELETE FROM entities WHERE file_id = ?", (file_id,))
-            self.conn.commit()
+            if not self._in_transaction:
+                self.conn.commit()
         except sqlite3.Error as e:
             logger.error(f"Failed to delete entities for file_id {file_id}: {e}")
-            self.conn.rollback()
+            if not self._in_transaction:
+                self.conn.rollback()
             raise
 
     def get_all_entities(self) -> list[tuple[str, str, int, int, str]]:
