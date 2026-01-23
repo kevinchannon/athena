@@ -1350,3 +1350,257 @@ def other_function():
         cached_paths = {r.path for r in results_cached}
         fallback_paths = {r.path for r in results_fallback}
         assert cached_paths == fallback_paths
+
+
+class TestConcurrentSearchAccess:
+    """Test concurrent access to search functionality (simulating MCP server scenarios)."""
+
+    def test_concurrent_searches_same_query(self, tmp_path):
+        """Test multiple threads searching with the same query simultaneously."""
+        import threading
+
+        # Create test repository
+        (tmp_path / ".git").mkdir()
+        test_file = tmp_path / "module.py"
+        test_file.write_text('''def process():
+    """Process data."""
+    pass
+
+def calculate():
+    """Calculate results."""
+    pass
+
+def validate():
+    """Validate input."""
+    pass
+''')
+
+        results_list = []
+        errors = []
+
+        def search_worker():
+            try:
+                results = search_docstrings("process", root=tmp_path)
+                results_list.append(results)
+            except Exception as e:
+                errors.append(e)
+
+        # Simulate 10 concurrent search requests
+        threads = [threading.Thread(target=search_worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Verify no errors
+        assert len(errors) == 0, f"Concurrent searches failed: {errors}"
+
+        # Verify all searches returned results
+        assert len(results_list) == 10
+        for results in results_list:
+            assert len(results) >= 1
+            assert any("process" in r.summary.lower() for r in results)
+
+    def test_concurrent_searches_different_queries(self, tmp_path):
+        """Test multiple threads searching with different queries simultaneously."""
+        import threading
+
+        # Create test repository
+        (tmp_path / ".git").mkdir()
+        test_file = tmp_path / "functions.py"
+        test_file.write_text('''def alpha():
+    """Alpha function for testing."""
+    pass
+
+def beta():
+    """Beta function for testing."""
+    pass
+
+def gamma():
+    """Gamma function for testing."""
+    pass
+''')
+
+        results_dict = {}
+        errors = []
+
+        def search_worker(query, thread_id):
+            try:
+                results = search_docstrings(query, root=tmp_path)
+                results_dict[thread_id] = results
+            except Exception as e:
+                errors.append((query, e))
+
+        # Different queries from different threads
+        queries = ["alpha", "beta", "gamma"] * 3  # 9 searches total
+        threads = [threading.Thread(target=search_worker, args=(q, i)) for i, q in enumerate(queries)]
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Verify no errors
+        assert len(errors) == 0, f"Concurrent searches with different queries failed: {errors}"
+
+        # Verify all searches completed
+        assert len(results_dict) == 9
+
+    def test_concurrent_searches_with_cache_updates(self, tmp_path):
+        """Test searches while the cache is being updated (read/write concurrency)."""
+        import threading
+        import time
+
+        # Create test repository
+        (tmp_path / ".git").mkdir()
+        initial_file = tmp_path / "initial.py"
+        initial_file.write_text('''def initial():
+    """Initial function."""
+    pass
+''')
+
+        # Run initial search to populate cache
+        search_docstrings("initial", root=tmp_path)
+
+        results_list = []
+        errors = []
+
+        def reader():
+            try:
+                for _ in range(5):
+                    results = search_docstrings("function", root=tmp_path)
+                    results_list.append(results)
+                    time.sleep(0.01)
+            except Exception as e:
+                errors.append(("read", e))
+
+        def writer(file_num):
+            try:
+                new_file = tmp_path / f"new_{file_num}.py"
+                new_file.write_text(f'''def function_{file_num}():
+    """Function number {file_num}."""
+    pass
+''')
+                # Trigger cache update by searching
+                search_docstrings(f"function_{file_num}", root=tmp_path)
+            except Exception as e:
+                errors.append(("write", e))
+
+        # Mix of readers and writers
+        threads = []
+        threads.extend([threading.Thread(target=reader) for _ in range(2)])
+        threads.extend([threading.Thread(target=writer, args=(i,)) for i in range(3)])
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Verify no errors (WAL mode allows concurrent reads/writes)
+        assert len(errors) == 0, f"Concurrent searches with cache updates failed: {errors}"
+
+        # Verify searches completed
+        assert len(results_list) == 10  # 2 readers * 5 searches each
+
+    def test_concurrent_first_time_cache_creation(self, tmp_path):
+        """Test concurrent searches when cache doesn't exist yet."""
+        import threading
+        import shutil
+
+        # Create test repository
+        (tmp_path / ".git").mkdir()
+        test_file = tmp_path / "test.py"
+        test_file.write_text('''def concurrent():
+    """Concurrent test function."""
+    pass
+''')
+
+        # Ensure cache doesn't exist
+        cache_dir = tmp_path / ".athena-cache"
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir)
+
+        results_list = []
+        errors = []
+
+        def search_worker():
+            try:
+                results = search_docstrings("concurrent", root=tmp_path)
+                results_list.append(results)
+            except Exception as e:
+                errors.append(e)
+
+        # Multiple threads trying to create cache simultaneously
+        threads = [threading.Thread(target=search_worker) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Verify no errors (one thread creates, others wait)
+        assert len(errors) == 0, f"Concurrent cache creation failed: {errors}"
+
+        # Verify all searches completed
+        assert len(results_list) == 5
+        for results in results_list:
+            assert len(results) >= 1
+
+    def test_concurrent_searches_with_file_modifications(self, tmp_path):
+        """Test searches when files are being modified (mtime changes)."""
+        import threading
+        import time
+
+        # Create test repository
+        (tmp_path / ".git").mkdir()
+        test_file = tmp_path / "dynamic.py"
+        test_file.write_text('''def version_1():
+    """Version 1 of function."""
+    pass
+''')
+
+        # Initial search to populate cache
+        search_docstrings("version", root=tmp_path)
+
+        results_list = []
+        errors = []
+
+        def reader():
+            try:
+                for _ in range(3):
+                    results = search_docstrings("version", root=tmp_path)
+                    results_list.append(len(results))
+                    time.sleep(0.02)
+            except Exception as e:
+                errors.append(("read", e))
+
+        def modifier():
+            try:
+                time.sleep(0.01)
+                # Modify file to trigger cache invalidation
+                test_file.write_text('''def version_1():
+    """Version 1 of function."""
+    pass
+
+def version_2():
+    """Version 2 of function."""
+    pass
+''')
+                time.sleep(0.01)
+            except Exception as e:
+                errors.append(("modify", e))
+
+        # Reader threads and modifier thread
+        threads = []
+        threads.extend([threading.Thread(target=reader) for _ in range(2)])
+        threads.append(threading.Thread(target=modifier))
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Verify no errors
+        assert len(errors) == 0, f"Concurrent searches with file modifications failed: {errors}"
+
+        # Verify searches completed
+        assert len(results_list) == 6  # 2 readers * 3 searches each
