@@ -38,8 +38,8 @@ use `athena --help` to see up-to-date information about the available features:
 │ mcp-server      Start the MCP server for Claude Code integration.              │
 │ install-mcp     Install MCP server configuration for Claude Code.              │
 │ sync            Update @athena hash tags in docstrings.                        │
-│ status          Check docstring hash synchronization status.                      │
-│ uninstall-mcp   Remove MCP server configuration from Claude Code.                 │
+│ status          Check docstring hash synchronization status.                   │
+│ uninstall-mcp   Remove MCP server configuration from Claude Code.              │
 ╰────────────────────────────────────────────────────────────────────────────────╯
 ```
 
