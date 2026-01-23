@@ -341,14 +341,28 @@ class CacheDatabase:
 
         with self._lock:
             try:
-                self.conn.executemany(
+                # Insert into entities table and collect the IDs
+                cursor = self.conn.cursor()
+                entity_ids = []
+                for e in entities:
+                    cursor.execute(
+                        """
+                        INSERT INTO entities (file_id, kind, name, entity_path, start, end, summary)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (file_id, e.kind, e.name, e.entity_path, e.start, e.end, e.summary)
+                    )
+                    entity_ids.append(cursor.lastrowid)
+
+                # Insert into FTS5 table
+                cursor.executemany(
                     """
-                    INSERT INTO entities (file_id, kind, name, entity_path, start, end, summary)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO entities_fts (entity_id, summary)
+                    VALUES (?, ?)
                     """,
-                    [(file_id, e.kind, e.name, e.entity_path, e.start, e.end, e.summary)
-                     for e in entities]
+                    [(entity_id, e.summary) for entity_id, e in zip(entity_ids, entities)]
                 )
+
                 if not self._in_transaction:
                     self.conn.commit()
             except sqlite3.Error as e:

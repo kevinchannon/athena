@@ -734,3 +734,160 @@ def test_database_timeout_on_lock(cache_db):
 
     # This test verifies the timeout is configured, not that it actually works
     # (testing actual locking would require low-level SQLite manipulation)
+
+
+# FTS5 Integration Tests
+
+
+def test_fts5_entry_created_on_entity_insert(cache_db):
+    """Test that FTS5 entries are created when entities are inserted."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    entities = [
+        CachedEntity(
+            file_id=file_id,
+            kind="function",
+            name="foo",
+            entity_path="src/example.py:foo",
+            start=10,
+            end=20,
+            summary="A test function for searching"
+        )
+    ]
+
+    cache_db.insert_entities(file_id, entities)
+
+    # Verify FTS5 entry was created
+    cursor = cache_db.conn.execute(
+        "SELECT entity_id, summary FROM entities_fts WHERE summary MATCH 'searching'"
+    )
+    result = cursor.fetchone()
+    assert result is not None
+    assert result[1] == "A test function for searching"
+
+
+def test_fts5_multiple_entries_on_batch_insert(cache_db):
+    """Test that FTS5 entries are created for batch entity insertion."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    entities = [
+        CachedEntity(
+            file_id=file_id,
+            kind="function",
+            name="foo",
+            entity_path="src/example.py:foo",
+            start=10,
+            end=20,
+            summary="Function for parsing data"
+        ),
+        CachedEntity(
+            file_id=file_id,
+            kind="class",
+            name="Bar",
+            entity_path="src/example.py:Bar",
+            start=25,
+            end=50,
+            summary="Class for processing requests"
+        ),
+        CachedEntity(
+            file_id=file_id,
+            kind="method",
+            name="baz",
+            entity_path="src/example.py:Bar.baz",
+            start=30,
+            end=35,
+            summary="Method for validating input"
+        )
+    ]
+
+    cache_db.insert_entities(file_id, entities)
+
+    # Verify all FTS5 entries created
+    cursor = cache_db.conn.execute("SELECT COUNT(*) FROM entities_fts")
+    count = cursor.fetchone()[0]
+    assert count == 3
+
+    # Verify we can search for each one
+    cursor = cache_db.conn.execute(
+        "SELECT summary FROM entities_fts WHERE summary MATCH 'parsing'"
+    )
+    assert cursor.fetchone()[0] == "Function for parsing data"
+
+    cursor = cache_db.conn.execute(
+        "SELECT summary FROM entities_fts WHERE summary MATCH 'processing'"
+    )
+    assert cursor.fetchone()[0] == "Class for processing requests"
+
+    cursor = cache_db.conn.execute(
+        "SELECT summary FROM entities_fts WHERE summary MATCH 'validating'"
+    )
+    assert cursor.fetchone()[0] == "Method for validating input"
+
+
+def test_fts5_entity_id_mapping(cache_db):
+    """Test that FTS5 entity_id correctly maps to entities table."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    entities = [
+        CachedEntity(
+            file_id=file_id,
+            kind="function",
+            name="foo",
+            entity_path="src/example.py:foo",
+            start=10,
+            end=20,
+            summary="A searchable function"
+        )
+    ]
+
+    cache_db.insert_entities(file_id, entities)
+
+    # Get entity_id from FTS5
+    cursor = cache_db.conn.execute(
+        "SELECT entity_id FROM entities_fts WHERE summary MATCH 'searchable'"
+    )
+    fts_entity_id = cursor.fetchone()[0]
+
+    # Verify it matches the entities table
+    cursor = cache_db.conn.execute(
+        "SELECT id, name, summary FROM entities WHERE id = ?",
+        (fts_entity_id,)
+    )
+    entity_row = cursor.fetchone()
+    assert entity_row is not None
+    assert entity_row[1] == "foo"
+    assert entity_row[2] == "A searchable function"
+
+
+def test_fts5_transaction_atomicity(cache_db):
+    """Test that FTS5 entries are rolled back on transaction failure."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    entities = [
+        CachedEntity(
+            file_id=file_id,
+            kind="function",
+            name="foo",
+            entity_path="src/example.py:foo",
+            start=10,
+            end=20,
+            summary="Function that should be rolled back"
+        )
+    ]
+
+    # Attempt transaction that will fail
+    try:
+        with cache_db.transaction():
+            cache_db.insert_entities(file_id, entities)
+            # Cause an error to trigger rollback
+            raise RuntimeError("Simulated failure")
+    except RuntimeError:
+        pass
+
+    # Verify FTS5 entries were rolled back
+    cursor = cache_db.conn.execute("SELECT COUNT(*) FROM entities_fts")
+    count = cursor.fetchone()[0]
+    assert count == 0
+
+    # Verify entities table was also rolled back
+    assert len(cache_db.get_all_entities()) == 0
