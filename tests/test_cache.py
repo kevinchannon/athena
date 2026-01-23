@@ -501,3 +501,210 @@ def test_multiple_sequential_transactions(cache_db):
     # Verify both transactions committed
     all_entities = cache_db.get_all_entities()
     assert len(all_entities) == 2
+
+
+# Concurrent Access Tests
+
+
+def test_concurrent_reads(cache_db):
+    """Test that multiple threads can read from cache simultaneously."""
+    import threading
+
+    # Populate cache
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+    entities = [
+        CachedEntity(file_id, "function", f"func_{i}", f"src/example.py:func_{i}", i*10, i*10+5, f"Function {i}")
+        for i in range(10)
+    ]
+    cache_db.insert_entities(file_id, entities)
+
+    results = []
+    errors = []
+
+    def read_entities():
+        try:
+            # Multiple reads from different threads
+            for _ in range(5):
+                entities = cache_db.get_all_entities()
+                results.append(len(entities))
+        except Exception as e:
+            errors.append(e)
+
+    # Create multiple reader threads
+    threads = [threading.Thread(target=read_entities) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # Verify no errors and all reads successful
+    assert len(errors) == 0, f"Concurrent reads failed: {errors}"
+    assert len(results) == 25  # 5 threads * 5 reads each
+    assert all(count == 10 for count in results)
+
+
+def test_concurrent_writes(cache_db):
+    """Test that multiple threads can write to cache with proper serialization."""
+    import threading
+
+    errors = []
+
+    def write_file(thread_id):
+        try:
+            file_id = cache_db.insert_file(f"src/file_{thread_id}.py", 1234567890.0 + thread_id)
+            entities = [
+                CachedEntity(
+                    file_id,
+                    "function",
+                    f"func_{thread_id}",
+                    f"src/file_{thread_id}.py:func_{thread_id}",
+                    10,
+                    20,
+                    f"Function in thread {thread_id}"
+                )
+            ]
+            cache_db.insert_entities(file_id, entities)
+        except Exception as e:
+            errors.append(e)
+
+    # Create multiple writer threads
+    threads = [threading.Thread(target=write_file, args=(i,)) for i in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # Verify no errors
+    assert len(errors) == 0, f"Concurrent writes failed: {errors}"
+
+    # Verify all files and entities were written
+    all_entities = cache_db.get_all_entities()
+    assert len(all_entities) == 10
+
+
+def test_concurrent_read_write(cache_db):
+    """Test concurrent reads and writes (WAL mode allows this)."""
+    import threading
+
+    # Populate initial data
+    file_id = cache_db.insert_file("src/initial.py", 1234567890.0)
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "initial", "src/initial.py:initial", 0, 10, "Initial")
+    ])
+
+    read_results = []
+    errors = []
+
+    def reader():
+        try:
+            for _ in range(10):
+                entities = cache_db.get_all_entities()
+                read_results.append(len(entities))
+        except Exception as e:
+            errors.append(("read", e))
+
+    def writer(thread_id):
+        try:
+            file_id = cache_db.insert_file(f"src/write_{thread_id}.py", 1234567890.0 + thread_id)
+            cache_db.insert_entities(file_id, [
+                CachedEntity(file_id, "function", f"write_{thread_id}", f"src/write_{thread_id}.py:write_{thread_id}", 0, 10, f"Write {thread_id}")
+            ])
+        except Exception as e:
+            errors.append(("write", e))
+
+    # Mix of readers and writers
+    threads = []
+    threads.extend([threading.Thread(target=reader) for _ in range(3)])
+    threads.extend([threading.Thread(target=writer, args=(i,)) for i in range(5)])
+
+    # Start all threads
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # Verify no errors
+    assert len(errors) == 0, f"Concurrent read/write failed: {errors}"
+
+    # Verify final state (initial + 5 writes)
+    final_entities = cache_db.get_all_entities()
+    assert len(final_entities) == 6
+
+
+def test_concurrent_transactions(cache_db):
+    """Test that transactions from different threads are properly isolated."""
+    import threading
+
+    errors = []
+
+    def transactional_write(thread_id):
+        try:
+            with cache_db.transaction():
+                file_id = cache_db.insert_file(f"src/trans_{thread_id}.py", 1234567890.0 + thread_id)
+                cache_db.insert_entities(file_id, [
+                    CachedEntity(file_id, "function", f"trans_{thread_id}", f"src/trans_{thread_id}.py:trans_{thread_id}", 0, 10, f"Trans {thread_id}")
+                ])
+        except Exception as e:
+            errors.append(e)
+
+    # Multiple threads each executing a transaction
+    threads = [threading.Thread(target=transactional_write, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # Verify no errors
+    assert len(errors) == 0, f"Concurrent transactions failed: {errors}"
+
+    # Verify all transactions committed
+    all_entities = cache_db.get_all_entities()
+    assert len(all_entities) == 8
+
+
+def test_concurrent_updates(cache_db):
+    """Test concurrent updates to the same file's mtime."""
+    import threading
+    import time
+
+    # Create initial file
+    file_id = cache_db.insert_file("src/concurrent.py", 1234567890.0)
+
+    errors = []
+
+    def update_mtime(new_mtime):
+        try:
+            cache_db.update_file_mtime(file_id, new_mtime)
+        except Exception as e:
+            errors.append(e)
+
+    # Multiple threads updating the same file's mtime
+    mtimes = [1234567890.0 + i for i in range(10)]
+    threads = [threading.Thread(target=update_mtime, args=(mt,)) for mt in mtimes]
+
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # Verify no errors (WAL mode should handle this)
+    assert len(errors) == 0, f"Concurrent updates failed: {errors}"
+
+    # Verify file still exists and has one of the mtimes
+    result = cache_db.get_file("src/concurrent.py")
+    assert result is not None
+    assert result[1] in mtimes
+
+
+def test_database_timeout_on_lock(cache_db):
+    """Test that database timeout is properly configured for busy scenarios."""
+    import threading
+    import time
+
+    # Verify timeout is set to 10 seconds
+    cursor = cache_db.conn.execute("PRAGMA busy_timeout")
+    timeout_ms = cursor.fetchone()[0]
+    assert timeout_ms == 10000  # 10 seconds in milliseconds
+
+    # This test verifies the timeout is configured, not that it actually works
+    # (testing actual locking would require low-level SQLite manipulation)
