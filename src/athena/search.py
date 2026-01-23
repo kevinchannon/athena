@@ -211,21 +211,22 @@ def _process_file_with_cache(
 
         entities = _parse_file_entities(file_path, source_code, relative_path)
 
-        # Insert file and entities into cache
-        file_id = cache_db.insert_file(relative_path, current_mtime)
-        cached_entities = [
-            CachedEntity(
-                file_id=file_id,
-                kind=kind,
-                name=relative_path,  # Using path as name for now
-                entity_path=path,
-                start=extent.start,
-                end=extent.end,
-                summary=docstring
-            )
-            for kind, path, extent, docstring in entities
-        ]
-        cache_db.insert_entities(file_id, cached_entities)
+        # Group file and entity insertion in a single transaction
+        with cache_db.transaction():
+            file_id = cache_db.insert_file(relative_path, current_mtime)
+            cached_entities = [
+                CachedEntity(
+                    file_id=file_id,
+                    kind=kind,
+                    name=relative_path,  # Using path as name for now
+                    entity_path=path,
+                    start=extent.start,
+                    end=extent.end,
+                    summary=docstring
+                )
+                for kind, path, extent, docstring in entities
+            ]
+            cache_db.insert_entities(file_id, cached_entities)
 
         return entities
 
@@ -239,22 +240,23 @@ def _process_file_with_cache(
 
         entities = _parse_file_entities(file_path, source_code, relative_path)
 
-        # Delete old entities and insert new ones
-        cache_db.delete_entities_for_file(file_id)
-        cached_entities = [
-            CachedEntity(
-                file_id=file_id,
-                kind=kind,
-                name=relative_path,
-                entity_path=path,
-                start=extent.start,
-                end=extent.end,
-                summary=docstring
-            )
-            for kind, path, extent, docstring in entities
-        ]
-        cache_db.insert_entities(file_id, cached_entities)
-        cache_db.update_file_mtime(file_id, current_mtime)
+        # Group related operations in a single transaction for atomicity
+        with cache_db.transaction():
+            cache_db.delete_entities_for_file(file_id)
+            cached_entities = [
+                CachedEntity(
+                    file_id=file_id,
+                    kind=kind,
+                    name=relative_path,
+                    entity_path=path,
+                    start=extent.start,
+                    end=extent.end,
+                    summary=docstring
+                )
+                for kind, path, extent, docstring in entities
+            ]
+            cache_db.insert_entities(file_id, cached_entities)
+            cache_db.update_file_mtime(file_id, current_mtime)
 
         return entities
 

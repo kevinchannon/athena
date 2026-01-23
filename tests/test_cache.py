@@ -343,3 +343,161 @@ def test_context_manager_cleanup(temp_cache_dir):
 
     # Connection should still be closed
     assert db.conn is None
+
+
+def test_transaction_commits_on_success(cache_db):
+    """Test that transaction commits all operations on success."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    entities = [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Foo"),
+        CachedEntity(file_id, "class", "Bar", "src/example.py:Bar", 25, 50, "Bar")
+    ]
+
+    # Use transaction for multiple operations
+    with cache_db.transaction():
+        cache_db.insert_entities(file_id, entities)
+        cache_db.update_file_mtime(file_id, 9999999999.0)
+
+    # Verify all operations committed
+    all_entities = cache_db.get_all_entities()
+    assert len(all_entities) == 2
+
+    file_info = cache_db.get_file("src/example.py")
+    assert file_info is not None
+    assert file_info[1] == 9999999999.0
+
+
+def test_transaction_rolls_back_on_error(cache_db):
+    """Test that transaction rolls back all operations on error."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    entities = [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Foo")
+    ]
+
+    # Attempt transaction that will fail
+    try:
+        with cache_db.transaction():
+            cache_db.insert_entities(file_id, entities)
+            # This should cause an error (invalid file_id)
+            cache_db.update_file_mtime(999999, 9999999999.0)
+    except Exception:
+        pass
+
+    # Verify rollback occurred - entities should not be present
+    all_entities = cache_db.get_all_entities()
+    assert len(all_entities) == 0
+
+
+def test_transaction_update_delete_insert_atomicity(cache_db):
+    """Test atomic update of file entities (delete old + insert new pattern)."""
+    # Initial setup
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+    old_entities = [
+        CachedEntity(file_id, "function", "old_func", "src/example.py:old_func", 10, 20, "Old")
+    ]
+    cache_db.insert_entities(file_id, old_entities)
+
+    # Verify initial state
+    assert len(cache_db.get_all_entities()) == 1
+
+    # Update entities atomically (simulating file change)
+    new_entities = [
+        CachedEntity(file_id, "function", "new_func", "src/example.py:new_func", 10, 25, "New"),
+        CachedEntity(file_id, "class", "NewClass", "src/example.py:NewClass", 30, 50, "Class")
+    ]
+
+    with cache_db.transaction():
+        cache_db.delete_entities_for_file(file_id)
+        cache_db.insert_entities(file_id, new_entities)
+        cache_db.update_file_mtime(file_id, 9999999999.0)
+
+    # Verify atomic update
+    all_entities = cache_db.get_all_entities()
+    assert len(all_entities) == 2
+    summaries = [e[4] for e in all_entities]
+    assert "New" in summaries
+    assert "Class" in summaries
+    assert "Old" not in summaries
+
+
+def test_transaction_prevents_partial_commits(cache_db):
+    """Test that individual operations don't commit within a transaction."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    entities = [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Foo")
+    ]
+
+    # Start transaction but don't complete it (simulate crash)
+    try:
+        with cache_db.transaction():
+            cache_db.insert_entities(file_id, entities)
+            # Simulate failure before transaction completes
+            raise RuntimeError("Simulated failure")
+    except RuntimeError:
+        pass
+
+    # Verify nothing was committed
+    all_entities = cache_db.get_all_entities()
+    assert len(all_entities) == 0
+
+
+def test_nested_transaction_handling(cache_db):
+    """Test that nested transactions are handled correctly."""
+    file_id_1 = cache_db.insert_file("src/file1.py", 1234567890.0)
+    file_id_2 = cache_db.insert_file("src/file2.py", 1234567890.0)
+
+    entities_1 = [
+        CachedEntity(file_id_1, "function", "foo", "src/file1.py:foo", 10, 20, "Foo")
+    ]
+    entities_2 = [
+        CachedEntity(file_id_2, "function", "bar", "src/file2.py:bar", 10, 20, "Bar")
+    ]
+
+    # Outer transaction with nested transaction
+    with cache_db.transaction():
+        cache_db.insert_entities(file_id_1, entities_1)
+
+        # Nested transaction
+        with cache_db.transaction():
+            cache_db.insert_entities(file_id_2, entities_2)
+
+        # Both should be part of outer transaction
+
+    # Verify both committed
+    all_entities = cache_db.get_all_entities()
+    assert len(all_entities) == 2
+
+
+def test_transaction_with_empty_operations(cache_db):
+    """Test that transaction with no operations doesn't cause errors."""
+    # Empty transaction should work fine
+    with cache_db.transaction():
+        pass
+
+    # Verify database still functional
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+    assert file_id is not None
+
+
+def test_multiple_sequential_transactions(cache_db):
+    """Test that multiple transactions can be executed sequentially."""
+    # First transaction
+    with cache_db.transaction():
+        file_id_1 = cache_db.insert_file("src/file1.py", 1234567890.0)
+        cache_db.insert_entities(file_id_1, [
+            CachedEntity(file_id_1, "function", "foo", "src/file1.py:foo", 10, 20, "Foo")
+        ])
+
+    # Second transaction
+    with cache_db.transaction():
+        file_id_2 = cache_db.insert_file("src/file2.py", 1234567890.0)
+        cache_db.insert_entities(file_id_2, [
+            CachedEntity(file_id_2, "function", "bar", "src/file2.py:bar", 10, 20, "Bar")
+        ])
+
+    # Verify both transactions committed
+    all_entities = cache_db.get_all_entities()
+    assert len(all_entities) == 2
