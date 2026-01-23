@@ -102,6 +102,15 @@ class CacheDatabase:
         """)
 
         self.conn.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts
+            USING fts5(
+                entity_id UNINDEXED,
+                summary,
+                tokenize='porter unicode61'
+            )
+        """)
+
+        self.conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_file_path ON files(file_path)
         """)
 
