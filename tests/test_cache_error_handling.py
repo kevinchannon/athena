@@ -132,8 +132,10 @@ def test_insert_entities_database_error(cache_db):
     # Replace connection with a mock that raises errors
     original_conn = cache_db.conn
     mock_conn = Mock()
-    mock_conn.execute = Mock()  # execute() is called for DELETE first
-    mock_conn.executemany.side_effect = sqlite3.Error("Insert failed")
+    mock_cursor = Mock()
+    mock_cursor.lastrowid = 1  # Return a valid ID for entity insertion
+    mock_cursor.executemany.side_effect = sqlite3.Error("Insert failed")
+    mock_conn.cursor.return_value = mock_cursor
     mock_conn.rollback = Mock()
     cache_db.conn = mock_conn
 
@@ -242,8 +244,10 @@ def test_transaction_rollback_on_error(cache_db):
     # Replace connection with a mock that raises errors
     original_conn = cache_db.conn
     mock_conn = Mock()
-    mock_conn.execute = Mock()  # execute() is called for DELETE first
-    mock_conn.executemany.side_effect = sqlite3.Error("Insert failed")
+    mock_cursor = Mock()
+    mock_cursor.lastrowid = 1  # Return a valid ID for entity insertion
+    mock_cursor.executemany.side_effect = sqlite3.Error("Insert failed")
+    mock_conn.cursor.return_value = mock_cursor
     mock_conn.rollback = Mock()
     cache_db.conn = mock_conn
 
