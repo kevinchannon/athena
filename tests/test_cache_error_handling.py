@@ -39,14 +39,18 @@ def test_database_open_failure(temp_cache_dir):
 
 def test_insert_file_database_error(cache_db):
     """Test that insert_file handles database errors."""
-    with patch.object(cache_db.conn, "execute", side_effect=sqlite3.Error("DB locked")):
+    # Mock the execute method to raise an error
+    mock_execute = Mock(side_effect=sqlite3.Error("DB locked"))
+    with patch.object(type(cache_db.conn), "execute", mock_execute):
         with pytest.raises(sqlite3.Error, match="DB locked"):
             cache_db.insert_file("test.py", 1234567890.0)
 
 
 def test_get_file_database_error(cache_db):
     """Test that get_file handles database errors."""
-    with patch.object(cache_db.conn, "execute", side_effect=sqlite3.Error("DB corrupted")):
+    # Mock the execute method to raise an error
+    mock_execute = Mock(side_effect=sqlite3.Error("DB corrupted"))
+    with patch.object(type(cache_db.conn), "execute", mock_execute):
         with pytest.raises(sqlite3.Error, match="DB corrupted"):
             cache_db.get_file("test.py")
 
@@ -57,7 +61,8 @@ def test_update_file_mtime_database_error(cache_db):
     file_id = cache_db.insert_file("test.py", 1234567890.0)
 
     # Then cause an error on update
-    with patch.object(cache_db.conn, "execute", side_effect=sqlite3.Error("Constraint violation")):
+    mock_execute = Mock(side_effect=sqlite3.Error("Constraint violation"))
+    with patch.object(type(cache_db.conn), "execute", mock_execute):
         with pytest.raises(sqlite3.Error, match="Constraint violation"):
             cache_db.update_file_mtime(file_id, 1234567900.0)
 
@@ -69,7 +74,8 @@ def test_delete_files_not_in_database_error(cache_db):
     cache_db.insert_file("file2.py", 456.0)
 
     # Cause an error during delete
-    with patch.object(cache_db.conn, "execute", side_effect=sqlite3.Error("Delete failed")):
+    mock_execute = Mock(side_effect=sqlite3.Error("Delete failed"))
+    with patch.object(type(cache_db.conn), "execute", mock_execute):
         with pytest.raises(sqlite3.Error, match="Delete failed"):
             cache_db.delete_files_not_in(["file1.py"])
 
@@ -90,7 +96,8 @@ def test_insert_entities_database_error(cache_db):
         )
     ]
 
-    with patch.object(cache_db.conn, "executemany", side_effect=sqlite3.Error("Insert failed")):
+    mock_executemany = Mock(side_effect=sqlite3.Error("Insert failed"))
+    with patch.object(type(cache_db.conn), "executemany", mock_executemany):
         with pytest.raises(sqlite3.Error, match="Insert failed"):
             cache_db.insert_entities(file_id, entities)
 
@@ -112,14 +119,16 @@ def test_delete_entities_for_file_database_error(cache_db):
     ]
     cache_db.insert_entities(file_id, entities)
 
-    with patch.object(cache_db.conn, "execute", side_effect=sqlite3.Error("Delete failed")):
+    mock_execute = Mock(side_effect=sqlite3.Error("Delete failed"))
+    with patch.object(type(cache_db.conn), "execute", mock_execute):
         with pytest.raises(sqlite3.Error, match="Delete failed"):
             cache_db.delete_entities_for_file(file_id)
 
 
 def test_get_all_entities_database_error(cache_db):
     """Test that get_all_entities handles database errors."""
-    with patch.object(cache_db.conn, "execute", side_effect=sqlite3.Error("Query failed")):
+    mock_execute = Mock(side_effect=sqlite3.Error("Query failed"))
+    with patch.object(type(cache_db.conn), "execute", mock_execute):
         with pytest.raises(sqlite3.Error, match="Query failed"):
             cache_db.get_all_entities()
 
@@ -169,7 +178,8 @@ def test_transaction_rollback_on_error(cache_db):
         )
     ]
 
-    with patch.object(cache_db.conn, "executemany", side_effect=sqlite3.Error("Insert failed")):
+    mock_executemany = Mock(side_effect=sqlite3.Error("Insert failed"))
+    with patch.object(type(cache_db.conn), "executemany", mock_executemany):
         with pytest.raises(sqlite3.Error):
             cache_db.insert_entities(file_id, entities)
 
@@ -181,11 +191,15 @@ def test_transaction_rollback_on_error(cache_db):
 
 def test_database_timeout_configuration(temp_cache_dir):
     """Test that database timeout is configured correctly."""
-    db = CacheDatabase(temp_cache_dir)
+    # Verify that sqlite3.connect is called with timeout parameter
+    with patch("athena.cache.sqlite3.connect") as mock_connect:
+        mock_conn = Mock()
+        mock_connect.return_value = mock_conn
 
-    # Verify timeout is set (we can't directly check the timeout value,
-    # but we can verify the connection was created successfully)
-    assert db.conn is not None
-    assert db.conn.timeout == 10.0
+        db = CacheDatabase(temp_cache_dir)
 
-    db.close()
+        # Verify connect was called with timeout
+        mock_connect.assert_called_once()
+        call_kwargs = mock_connect.call_args.kwargs
+        assert "timeout" in call_kwargs
+        assert call_kwargs["timeout"] == 10.0
