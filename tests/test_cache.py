@@ -891,3 +891,137 @@ def test_fts5_transaction_atomicity(cache_db):
 
     # Verify entities table was also rolled back
     assert len(cache_db.get_all_entities()) == 0
+
+
+def test_fts5_entries_deleted_with_entities(cache_db):
+    """Test that FTS5 entries are deleted when entities are deleted."""
+    # Insert file with entities
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    entities = [
+        CachedEntity(
+            file_id=file_id,
+            kind="function",
+            name="foo",
+            entity_path="src/example.py:foo",
+            start=10,
+            end=20,
+            summary="Function to be deleted"
+        )
+    ]
+
+    cache_db.insert_entities(file_id, entities)
+
+    # Verify FTS5 entry exists
+    cursor = cache_db.conn.execute("SELECT COUNT(*) FROM entities_fts")
+    assert cursor.fetchone()[0] == 1
+
+    # Delete entities for file
+    cache_db.delete_entities_for_file(file_id)
+
+    # Verify FTS5 entries were deleted
+    cursor = cache_db.conn.execute("SELECT COUNT(*) FROM entities_fts")
+    assert cursor.fetchone()[0] == 0
+
+
+def test_fts5_entries_deleted_on_file_deletion(cache_db):
+    """Test that FTS5 entries are deleted when files are deleted via cascade."""
+    # Insert two files with entities
+    file_id_1 = cache_db.insert_file("src/file1.py", 1234567890.0)
+    file_id_2 = cache_db.insert_file("src/file2.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id_1, [
+        CachedEntity(file_id_1, "function", "foo", "src/file1.py:foo", 10, 20, "Foo function")
+    ])
+    cache_db.insert_entities(file_id_2, [
+        CachedEntity(file_id_2, "function", "bar", "src/file2.py:bar", 10, 20, "Bar function")
+    ])
+
+    # Verify both FTS5 entries exist
+    cursor = cache_db.conn.execute("SELECT COUNT(*) FROM entities_fts")
+    assert cursor.fetchone()[0] == 2
+
+    # Delete file1
+    cache_db.delete_files_not_in(["src/file2.py"])
+
+    # Verify only file2's FTS5 entry remains
+    cursor = cache_db.conn.execute("SELECT COUNT(*) FROM entities_fts")
+    assert cursor.fetchone()[0] == 1
+
+    cursor = cache_db.conn.execute(
+        "SELECT summary FROM entities_fts WHERE summary MATCH 'Bar'"
+    )
+    assert cursor.fetchone()[0] == "Bar function"
+
+
+def test_fts5_all_entries_deleted_when_all_files_deleted(cache_db):
+    """Test that all FTS5 entries are deleted when all files are removed."""
+    # Insert multiple files with entities
+    for i in range(3):
+        file_id = cache_db.insert_file(f"src/file{i}.py", 1234567890.0)
+        cache_db.insert_entities(file_id, [
+            CachedEntity(file_id, "function", f"func{i}", f"src/file{i}.py:func{i}", 10, 20, f"Function {i}")
+        ])
+
+    # Verify FTS5 entries exist
+    cursor = cache_db.conn.execute("SELECT COUNT(*) FROM entities_fts")
+    assert cursor.fetchone()[0] == 3
+
+    # Delete all files
+    cache_db.delete_files_not_in([])
+
+    # Verify all FTS5 entries deleted
+    cursor = cache_db.conn.execute("SELECT COUNT(*) FROM entities_fts")
+    assert cursor.fetchone()[0] == 0
+
+
+def test_fts5_deletion_with_large_batch(cache_db):
+    """Test FTS5 deletion works correctly with >999 files (chunking logic)."""
+    # Insert 1500 files with entities
+    num_files = 1500
+    for i in range(num_files):
+        file_id = cache_db.insert_file(f"src/file{i}.py", 1234567890.0)
+        cache_db.insert_entities(file_id, [
+            CachedEntity(file_id, "function", f"func{i}", f"src/file{i}.py:func{i}", 10, 20, f"Function {i}")
+        ])
+
+    # Verify all FTS5 entries created
+    cursor = cache_db.conn.execute("SELECT COUNT(*) FROM entities_fts")
+    assert cursor.fetchone()[0] == num_files
+
+    # Keep only first 500 files (delete 1000)
+    files_to_keep = [f"src/file{i}.py" for i in range(500)]
+    cache_db.delete_files_not_in(files_to_keep)
+
+    # Verify only 500 FTS5 entries remain
+    cursor = cache_db.conn.execute("SELECT COUNT(*) FROM entities_fts")
+    assert cursor.fetchone()[0] == 500
+
+
+def test_fts5_deletion_preserves_correct_entries(cache_db):
+    """Test that FTS5 deletion removes only the correct entries."""
+    # Insert multiple files
+    file_id_1 = cache_db.insert_file("src/keep.py", 1234567890.0)
+    file_id_2 = cache_db.insert_file("src/delete.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id_1, [
+        CachedEntity(file_id_1, "function", "keep_func", "src/keep.py:keep_func", 10, 20, "Function to keep")
+    ])
+    cache_db.insert_entities(file_id_2, [
+        CachedEntity(file_id_2, "function", "delete_func", "src/delete.py:delete_func", 10, 20, "Function to delete")
+    ])
+
+    # Delete file2
+    cache_db.delete_files_not_in(["src/keep.py"])
+
+    # Verify correct FTS5 entry remains
+    cursor = cache_db.conn.execute(
+        "SELECT summary FROM entities_fts WHERE summary MATCH 'keep'"
+    )
+    assert cursor.fetchone()[0] == "Function to keep"
+
+    # Verify deleted entry is gone
+    cursor = cache_db.conn.execute(
+        "SELECT summary FROM entities_fts WHERE summary MATCH 'delete'"
+    )
+    assert cursor.fetchone() is None
