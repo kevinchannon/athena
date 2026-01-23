@@ -231,16 +231,19 @@ class CacheDatabase:
 
         Raises:
             RuntimeError: If database connection not initialized.
+            ValueError: If file_id does not exist.
             sqlite3.Error: If database operation fails.
         """
         if self.conn is None:
             raise RuntimeError("Database connection not initialized")
 
         try:
-            self.conn.execute(
+            cursor = self.conn.execute(
                 "UPDATE files SET mtime = ? WHERE id = ?",
                 (mtime, file_id)
             )
+            if cursor.rowcount == 0:
+                raise ValueError(f"File with id {file_id} not found")
             if not self._in_transaction:
                 self.conn.commit()
         except sqlite3.Error as e:
