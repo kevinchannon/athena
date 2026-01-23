@@ -341,14 +341,10 @@ class CacheDatabase:
 
         with self._lock:
             try:
-                self.conn.executemany(
-                    """
-                    INSERT INTO entities (file_id, kind, name, entity_path, start, end, summary)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    [(file_id, e.kind, e.name, e.entity_path, e.start, e.end, e.summary)
-                     for e in entities]
-                )
+                cursor = self.conn.cursor()
+                entity_ids = self._insert_entities_and_collect_ids(cursor, file_id, entities)
+                self._populate_fts_table(cursor, entity_ids, entities)
+
                 if not self._in_transaction:
                     self.conn.commit()
             except sqlite3.Error as e:
@@ -356,6 +352,34 @@ class CacheDatabase:
                 if not self._in_transaction:
                     self.conn.rollback()
                 raise
+
+    def _insert_entities_and_collect_ids(
+        self, cursor: sqlite3.Cursor, file_id: int, entities: list[CachedEntity]
+    ) -> list[int]:
+        """Insert entities into the entities table and return their IDs."""
+        entity_ids = []
+        for e in entities:
+            cursor.execute(
+                """
+                INSERT INTO entities (file_id, kind, name, entity_path, start, end, summary)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (file_id, e.kind, e.name, e.entity_path, e.start, e.end, e.summary)
+            )
+            entity_ids.append(cursor.lastrowid)
+        return entity_ids
+
+    def _populate_fts_table(
+        self, cursor: sqlite3.Cursor, entity_ids: list[int], entities: list[CachedEntity]
+    ) -> None:
+        """Populate the FTS5 table with entity IDs and summaries."""
+        cursor.executemany(
+            """
+            INSERT INTO entities_fts (entity_id, summary)
+            VALUES (?, ?)
+            """,
+            [(entity_id, e.summary) for entity_id, e in zip(entity_ids, entities)]
+        )
 
     def delete_entities_for_file(self, file_id: int) -> None:
         """Delete all entities for a specific file.
