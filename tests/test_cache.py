@@ -37,6 +37,7 @@ def test_database_creation(temp_cache_dir):
     tables = [row[0] for row in cursor.fetchall()]
     assert "files" in tables
     assert "entities" in tables
+    assert "entities_fts" in tables
 
     db.close()
 
@@ -53,6 +54,31 @@ def test_foreign_keys_enabled(cache_db):
     cursor = cache_db.conn.execute("PRAGMA foreign_keys")
     enabled = cursor.fetchone()[0]
     assert enabled == 1
+
+
+def test_fts5_table_created(cache_db):
+    """Test that FTS5 virtual table is created with correct configuration."""
+    # Verify FTS5 table exists
+    cursor = cache_db.conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='entities_fts'"
+    )
+    assert cursor.fetchone() is not None
+
+    # Verify FTS5 table has correct columns by inserting a test row
+    cache_db.conn.execute(
+        "INSERT INTO entities_fts (entity_id, summary) VALUES (?, ?)",
+        (1, "test summary")
+    )
+    cache_db.conn.commit()
+
+    # Verify we can query the FTS5 table
+    cursor = cache_db.conn.execute(
+        "SELECT entity_id, summary FROM entities_fts WHERE summary MATCH 'test'"
+    )
+    result = cursor.fetchone()
+    assert result is not None
+    assert result[0] == 1
+    assert result[1] == "test summary"
 
 
 def test_file_insertion(cache_db):
