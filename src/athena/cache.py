@@ -288,7 +288,6 @@ class CacheDatabase:
         with self._lock:
             try:
                 if not file_paths:
-                    # Delete all FTS5 entries, then all files
                     self.conn.execute("DELETE FROM entities_fts")
                     self.conn.execute("DELETE FROM files")
                     if not self._in_transaction:
@@ -313,7 +312,6 @@ class CacheDatabase:
                     chunk = files_to_delete_list[i:i + chunk_size]
                     placeholders = ",".join("?" * len(chunk))
 
-                    # Delete FTS5 entries for entities in these files
                     self.conn.execute(
                         f"""
                         DELETE FROM entities_fts
@@ -326,7 +324,6 @@ class CacheDatabase:
                         chunk
                     )
 
-                    # Delete files (CASCADE will delete entities)
                     self.conn.execute(
                         f"DELETE FROM files WHERE file_path IN ({placeholders})",
                         chunk
@@ -415,7 +412,6 @@ class CacheDatabase:
 
         with self._lock:
             try:
-                # Delete FTS5 entries for entities in this file
                 self.conn.execute(
                     """
                     DELETE FROM entities_fts
@@ -425,7 +421,6 @@ class CacheDatabase:
                     """,
                     (file_id,)
                 )
-                # Delete entities
                 self.conn.execute("DELETE FROM entities WHERE file_id = ?", (file_id,))
                 if not self._in_transaction:
                     self.conn.commit()
