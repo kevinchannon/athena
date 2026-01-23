@@ -39,20 +39,35 @@ def test_database_open_failure(temp_cache_dir):
 
 def test_insert_file_database_error(cache_db):
     """Test that insert_file handles database errors."""
-    # Mock the execute method to raise an error
-    mock_execute = Mock(side_effect=sqlite3.Error("DB locked"))
-    with patch.object(type(cache_db.conn), "execute", mock_execute):
+    # Replace connection with a mock that raises errors
+    original_conn = cache_db.conn
+    mock_conn = Mock()
+    mock_conn.execute.side_effect = sqlite3.Error("DB locked")
+    mock_conn.rollback = Mock()
+    cache_db.conn = mock_conn
+
+    try:
         with pytest.raises(sqlite3.Error, match="DB locked"):
             cache_db.insert_file("test.py", 1234567890.0)
+        # Verify rollback was called
+        mock_conn.rollback.assert_called_once()
+    finally:
+        cache_db.conn = original_conn
 
 
 def test_get_file_database_error(cache_db):
     """Test that get_file handles database errors."""
-    # Mock the execute method to raise an error
-    mock_execute = Mock(side_effect=sqlite3.Error("DB corrupted"))
-    with patch.object(type(cache_db.conn), "execute", mock_execute):
+    # Replace connection with a mock that raises errors
+    original_conn = cache_db.conn
+    mock_conn = Mock()
+    mock_conn.execute.side_effect = sqlite3.Error("DB corrupted")
+    cache_db.conn = mock_conn
+
+    try:
         with pytest.raises(sqlite3.Error, match="DB corrupted"):
             cache_db.get_file("test.py")
+    finally:
+        cache_db.conn = original_conn
 
 
 def test_update_file_mtime_database_error(cache_db):
@@ -61,10 +76,19 @@ def test_update_file_mtime_database_error(cache_db):
     file_id = cache_db.insert_file("test.py", 1234567890.0)
 
     # Then cause an error on update
-    mock_execute = Mock(side_effect=sqlite3.Error("Constraint violation"))
-    with patch.object(type(cache_db.conn), "execute", mock_execute):
+    original_conn = cache_db.conn
+    mock_conn = Mock()
+    mock_conn.execute.side_effect = sqlite3.Error("Constraint violation")
+    mock_conn.rollback = Mock()
+    cache_db.conn = mock_conn
+
+    try:
         with pytest.raises(sqlite3.Error, match="Constraint violation"):
             cache_db.update_file_mtime(file_id, 1234567900.0)
+        # Verify rollback was called
+        mock_conn.rollback.assert_called_once()
+    finally:
+        cache_db.conn = original_conn
 
 
 def test_delete_files_not_in_database_error(cache_db):
@@ -74,10 +98,19 @@ def test_delete_files_not_in_database_error(cache_db):
     cache_db.insert_file("file2.py", 456.0)
 
     # Cause an error during delete
-    mock_execute = Mock(side_effect=sqlite3.Error("Delete failed"))
-    with patch.object(type(cache_db.conn), "execute", mock_execute):
+    original_conn = cache_db.conn
+    mock_conn = Mock()
+    mock_conn.execute.side_effect = sqlite3.Error("Delete failed")
+    mock_conn.rollback = Mock()
+    cache_db.conn = mock_conn
+
+    try:
         with pytest.raises(sqlite3.Error, match="Delete failed"):
             cache_db.delete_files_not_in(["file1.py"])
+        # Verify rollback was called
+        mock_conn.rollback.assert_called_once()
+    finally:
+        cache_db.conn = original_conn
 
 
 def test_insert_entities_database_error(cache_db):
@@ -96,10 +129,21 @@ def test_insert_entities_database_error(cache_db):
         )
     ]
 
-    mock_executemany = Mock(side_effect=sqlite3.Error("Insert failed"))
-    with patch.object(type(cache_db.conn), "executemany", mock_executemany):
+    # Replace connection with a mock that raises errors
+    original_conn = cache_db.conn
+    mock_conn = Mock()
+    mock_conn.execute = Mock()  # execute() is called for DELETE first
+    mock_conn.executemany.side_effect = sqlite3.Error("Insert failed")
+    mock_conn.rollback = Mock()
+    cache_db.conn = mock_conn
+
+    try:
         with pytest.raises(sqlite3.Error, match="Insert failed"):
             cache_db.insert_entities(file_id, entities)
+        # Verify rollback was called
+        mock_conn.rollback.assert_called_once()
+    finally:
+        cache_db.conn = original_conn
 
 
 def test_delete_entities_for_file_database_error(cache_db):
@@ -119,18 +163,35 @@ def test_delete_entities_for_file_database_error(cache_db):
     ]
     cache_db.insert_entities(file_id, entities)
 
-    mock_execute = Mock(side_effect=sqlite3.Error("Delete failed"))
-    with patch.object(type(cache_db.conn), "execute", mock_execute):
+    # Replace connection with a mock that raises errors
+    original_conn = cache_db.conn
+    mock_conn = Mock()
+    mock_conn.execute.side_effect = sqlite3.Error("Delete failed")
+    mock_conn.rollback = Mock()
+    cache_db.conn = mock_conn
+
+    try:
         with pytest.raises(sqlite3.Error, match="Delete failed"):
             cache_db.delete_entities_for_file(file_id)
+        # Verify rollback was called
+        mock_conn.rollback.assert_called_once()
+    finally:
+        cache_db.conn = original_conn
 
 
 def test_get_all_entities_database_error(cache_db):
     """Test that get_all_entities handles database errors."""
-    mock_execute = Mock(side_effect=sqlite3.Error("Query failed"))
-    with patch.object(type(cache_db.conn), "execute", mock_execute):
+    # Replace connection with a mock that raises errors
+    original_conn = cache_db.conn
+    mock_conn = Mock()
+    mock_conn.execute.side_effect = sqlite3.Error("Query failed")
+    cache_db.conn = mock_conn
+
+    try:
         with pytest.raises(sqlite3.Error, match="Query failed"):
             cache_db.get_all_entities()
+    finally:
+        cache_db.conn = original_conn
 
 
 def test_database_connection_not_initialized():
@@ -178,13 +239,24 @@ def test_transaction_rollback_on_error(cache_db):
         )
     ]
 
-    mock_executemany = Mock(side_effect=sqlite3.Error("Insert failed"))
-    with patch.object(type(cache_db.conn), "executemany", mock_executemany):
+    # Replace connection with a mock that raises errors
+    original_conn = cache_db.conn
+    mock_conn = Mock()
+    mock_conn.execute = Mock()  # execute() is called for DELETE first
+    mock_conn.executemany.side_effect = sqlite3.Error("Insert failed")
+    mock_conn.rollback = Mock()
+    cache_db.conn = mock_conn
+
+    try:
         with pytest.raises(sqlite3.Error):
             cache_db.insert_entities(file_id, entities)
+        # Verify rollback was called
+        mock_conn.rollback.assert_called_once()
+    finally:
+        cache_db.conn = original_conn
 
     # Verify no entities were inserted (transaction was rolled back)
-    cursor = cache_db.conn.execute("SELECT COUNT(*) FROM entities WHERE file_id = ?", (file_id,))
+    cursor = original_conn.execute("SELECT COUNT(*) FROM entities WHERE file_id = ?", (file_id,))
     count = cursor.fetchone()[0]
     assert count == 0
 
