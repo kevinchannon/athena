@@ -526,8 +526,11 @@ class CacheDatabase:
 
         with self._lock:
             try:
-                # For standard query, just pass the query terms directly
-                # FTS5 will handle tokenization and OR matching
+                # Transform query to OR multiple terms together
+                # FTS5 defaults to AND, so we need explicit OR operators
+                terms = query.split()
+                or_query = " OR ".join(terms)
+
                 if exclude_ids:
                     placeholders = ",".join("?" * len(exclude_ids))
                     cursor = self.conn.execute(
@@ -539,7 +542,7 @@ class CacheDatabase:
                         ORDER BY rank
                         LIMIT ?
                         """,
-                        (query, *exclude_ids, limit)
+                        (or_query, *exclude_ids, limit)
                     )
                 else:
                     cursor = self.conn.execute(
@@ -550,9 +553,9 @@ class CacheDatabase:
                         ORDER BY rank
                         LIMIT ?
                         """,
-                        (query, limit)
+                        (or_query, limit)
                     )
                 return [row[0] for row in cursor.fetchall()]
             except sqlite3.Error as e:
-                logger.error(f"Failed to execute FTS5 standard query '{query}': {e}")
+                logger.error(f"Failed to execute FTS5 standard query '{or_query}' (original: '{query}'): {e}")
                 raise
