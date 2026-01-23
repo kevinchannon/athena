@@ -1025,3 +1025,289 @@ def test_fts5_deletion_preserves_correct_entries(cache_db):
         "SELECT summary FROM entities_fts WHERE summary MATCH 'delete'"
     )
     assert cursor.fetchone() is None
+
+
+# FTS5 Query Method Tests
+
+
+def test_query_fts_phrase_exact_match(cache_db):
+    """Test phrase query returns exact phrase matches."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data"),
+        CachedEntity(file_id, "function", "bar", "src/example.py:bar", 30, 40, "Parse XML data"),
+        CachedEntity(file_id, "function", "baz", "src/example.py:baz", 50, 60, "JSON parser utility")
+    ])
+
+    # Query for exact phrase "JSON data"
+    entity_ids = cache_db.query_fts_phrase("JSON data", limit=10)
+
+    # Should only match "Parse JSON data", not "JSON parser utility"
+    assert len(entity_ids) == 1
+
+    # Verify it's the correct entity
+    cursor = cache_db.conn.execute(
+        "SELECT name FROM entities WHERE id = ?",
+        (entity_ids[0],)
+    )
+    assert cursor.fetchone()[0] == "foo"
+
+
+def test_query_fts_phrase_multiple_matches(cache_db):
+    """Test phrase query returns multiple exact matches."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "func1", "src/example.py:func1", 10, 20, "Process user input"),
+        CachedEntity(file_id, "function", "func2", "src/example.py:func2", 30, 40, "Validate user input"),
+        CachedEntity(file_id, "function", "func3", "src/example.py:func3", 50, 60, "User authentication")
+    ])
+
+    # Query for exact phrase "user input"
+    entity_ids = cache_db.query_fts_phrase("user input", limit=10)
+
+    # Should match both func1 and func2
+    assert len(entity_ids) == 2
+
+    # Verify correct entities matched
+    cursor = cache_db.conn.execute(
+        f"SELECT name FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})",
+        entity_ids
+    )
+    names = {row[0] for row in cursor.fetchall()}
+    assert names == {"func1", "func2"}
+
+
+def test_query_fts_phrase_empty_query(cache_db):
+    """Test phrase query with empty string returns empty list."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Some function")
+    ])
+
+    # Empty query should return empty list
+    assert cache_db.query_fts_phrase("", limit=10) == []
+    assert cache_db.query_fts_phrase("   ", limit=10) == []
+
+
+def test_query_fts_phrase_no_matches(cache_db):
+    """Test phrase query with no matches returns empty list."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data")
+    ])
+
+    # Query for phrase that doesn't exist
+    entity_ids = cache_db.query_fts_phrase("XML parser", limit=10)
+    assert entity_ids == []
+
+
+def test_query_fts_phrase_respects_limit(cache_db):
+    """Test phrase query respects the limit parameter."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    # Insert 5 entities with the same phrase
+    entities = [
+        CachedEntity(file_id, "function", f"func{i}", f"src/example.py:func{i}", i*10, i*10+5, "Parse data")
+        for i in range(5)
+    ]
+    cache_db.insert_entities(file_id, entities)
+
+    # Query with limit=2
+    entity_ids = cache_db.query_fts_phrase("Parse data", limit=2)
+    assert len(entity_ids) == 2
+
+
+def test_query_fts_phrase_with_quotes(cache_db):
+    """Test phrase query handles quotes in the query string."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, 'Parse "quoted" string')
+    ])
+
+    # Query for phrase with quotes (should be escaped)
+    entity_ids = cache_db.query_fts_phrase('"quoted" string', limit=10)
+    assert len(entity_ids) == 1
+
+
+def test_query_fts_phrase_case_insensitive(cache_db):
+    """Test phrase query is case insensitive."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON Data")
+    ])
+
+    # Query with different case should still match
+    entity_ids = cache_db.query_fts_phrase("json data", limit=10)
+    assert len(entity_ids) == 1
+
+
+def test_query_fts_standard_single_term(cache_db):
+    """Test standard query matches single term."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data"),
+        CachedEntity(file_id, "function", "bar", "src/example.py:bar", 30, 40, "Process XML files"),
+        CachedEntity(file_id, "function", "baz", "src/example.py:baz", 50, 60, "JSON parser utility")
+    ])
+
+    # Query for single term "JSON"
+    entity_ids = cache_db.query_fts_standard("JSON", limit=10, exclude_ids=set())
+
+    # Should match both foo and baz
+    assert len(entity_ids) == 2
+
+    cursor = cache_db.conn.execute(
+        f"SELECT name FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})",
+        entity_ids
+    )
+    names = {row[0] for row in cursor.fetchall()}
+    assert names == {"foo", "baz"}
+
+
+def test_query_fts_standard_multiple_terms(cache_db):
+    """Test standard query matches multiple terms (OR logic)."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data"),
+        CachedEntity(file_id, "function", "bar", "src/example.py:bar", 30, 40, "Process XML files"),
+        CachedEntity(file_id, "function", "baz", "src/example.py:baz", 50, 60, "Validate input data")
+    ])
+
+    # Query for "JSON XML" (should match any document with either term)
+    entity_ids = cache_db.query_fts_standard("JSON XML", limit=10, exclude_ids=set())
+
+    # Should match foo (JSON) and bar (XML)
+    assert len(entity_ids) == 2
+
+    cursor = cache_db.conn.execute(
+        f"SELECT name FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})",
+        entity_ids
+    )
+    names = {row[0] for row in cursor.fetchall()}
+    assert names == {"foo", "bar"}
+
+
+def test_query_fts_standard_excludes_ids(cache_db):
+    """Test standard query excludes specified entity IDs."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data"),
+        CachedEntity(file_id, "function", "bar", "src/example.py:bar", 30, 40, "JSON parser utility"),
+        CachedEntity(file_id, "function", "baz", "src/example.py:baz", 50, 60, "JSON validator")
+    ])
+
+    # First get all matches
+    all_ids = cache_db.query_fts_standard("JSON", limit=10, exclude_ids=set())
+    assert len(all_ids) == 3
+
+    # Now exclude the first ID
+    excluded_ids = {all_ids[0]}
+    remaining_ids = cache_db.query_fts_standard("JSON", limit=10, exclude_ids=excluded_ids)
+
+    # Should get 2 results, excluding the first one
+    assert len(remaining_ids) == 2
+    assert all_ids[0] not in remaining_ids
+
+
+def test_query_fts_standard_empty_query(cache_db):
+    """Test standard query with empty string returns empty list."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Some function")
+    ])
+
+    # Empty query should return empty list
+    assert cache_db.query_fts_standard("", limit=10, exclude_ids=set()) == []
+    assert cache_db.query_fts_standard("   ", limit=10, exclude_ids=set()) == []
+
+
+def test_query_fts_standard_no_matches(cache_db):
+    """Test standard query with no matches returns empty list."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data")
+    ])
+
+    # Query for term that doesn't exist
+    entity_ids = cache_db.query_fts_standard("nonexistent", limit=10, exclude_ids=set())
+    assert entity_ids == []
+
+
+def test_query_fts_standard_respects_limit(cache_db):
+    """Test standard query respects the limit parameter."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    # Insert 5 entities with the same term
+    entities = [
+        CachedEntity(file_id, "function", f"func{i}", f"src/example.py:func{i}", i*10, i*10+5, "Parse data")
+        for i in range(5)
+    ]
+    cache_db.insert_entities(file_id, entities)
+
+    # Query with limit=2
+    entity_ids = cache_db.query_fts_standard("Parse", limit=2, exclude_ids=set())
+    assert len(entity_ids) == 2
+
+
+def test_query_fts_standard_case_insensitive(cache_db):
+    """Test standard query is case insensitive."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON Data")
+    ])
+
+    # Query with different case should still match
+    entity_ids = cache_db.query_fts_standard("json", limit=10, exclude_ids=set())
+    assert len(entity_ids) == 1
+
+
+def test_query_fts_standard_empty_exclude_set(cache_db):
+    """Test standard query works with empty exclude_ids set."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse data")
+    ])
+
+    # Empty exclude set should return normal results
+    entity_ids = cache_db.query_fts_standard("Parse", limit=10, exclude_ids=set())
+    assert len(entity_ids) == 1
+
+
+def test_query_fts_standard_bm25_ranking(cache_db):
+    """Test standard query ranks documents by BM25 score."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "func1", "src/example.py:func1", 10, 20, "Parse JSON data with JSON parser"),
+        CachedEntity(file_id, "function", "func2", "src/example.py:func2", 30, 40, "Parse JSON"),
+        CachedEntity(file_id, "function", "func3", "src/example.py:func3", 50, 60, "Process data files")
+    ])
+
+    # Query for "JSON"
+    entity_ids = cache_db.query_fts_standard("JSON", limit=10, exclude_ids=set())
+
+    # func1 should rank higher than func2 (more JSON mentions)
+    # func3 should not appear (no JSON)
+    assert len(entity_ids) == 2
+
+    cursor = cache_db.conn.execute(
+        f"SELECT name FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})",
+        entity_ids
+    )
+    names = [row[0] for row in cursor.fetchall()]
+
+    # First result should be func1 (highest BM25 score)
+    assert names[0] == "func1"
