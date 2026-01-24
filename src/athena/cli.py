@@ -123,15 +123,11 @@ def search(
             table.add_column("Kind", style="green")
             table.add_column("Path", style="blue")
             table.add_column("Extent", style="yellow")
-            table.add_column("Summary", style="white")
+            table.add_column("Summary", style="white", no_wrap=False, overflow="fold")
 
             for result in results:
                 extent_str = f"{result.extent.start}-{result.extent.end}"
-                # Truncate summary to first line if multi-line
-                summary = result.summary.split('\n')[0] if result.summary else ""
-                # Truncate summary if too long (max 80 chars)
-                if len(summary) > 80:
-                    summary = summary[:77] + "..."
+                summary = result.summary if result.summary else ""
                 table.add_row(result.kind, result.path, extent_str, summary)
 
             console.print(table)
