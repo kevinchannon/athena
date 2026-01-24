@@ -530,7 +530,7 @@ def baz():
             assert len(data) <= 2
 
     def test_search_multiline_summary_in_table(self):
-        """Test that table output truncates multiline summaries."""
+        """Test that table output wraps multiline summaries."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
             (repo_root / ".git").mkdir()
@@ -554,11 +554,36 @@ def baz():
             )
 
             assert result.returncode == 0
-            # Table should show only first line
+            # Table should show all lines of the summary (wrapped)
             assert "First line" in result.stdout
-            # Should not show subsequent lines in table
-            lines = result.stdout.split("\n")
-            # Check that summary is truncated (no "Second line" in same row)
-            for line in lines:
-                if "First line" in line:
-                    assert "Second line" not in line
+            assert "Second line" in result.stdout
+            assert "Third line" in result.stdout
+
+    def test_search_long_summary_in_table(self):
+        """Test that table output wraps long single-line summaries."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            (repo_root / ".git").mkdir()
+            test_file = repo_root / "test.py"
+            # Create a summary longer than 80 characters
+            long_summary = "This is a very long summary that exceeds eighty characters and should be wrapped in the table output instead of being truncated"
+            test_file.write_text(
+                f'''def bar():
+    """{long_summary}"""
+    return 2
+'''
+            )
+
+            result = subprocess.run(
+                ["uv", "run", "-m", "athena", "search", "long summary"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True
+            )
+
+            assert result.returncode == 0
+            # Table should show full summary (wrapped, not truncated)
+            assert "This is a very long summary" in result.stdout
+            assert "instead of being truncated" in result.stdout
+            # Should not have ellipsis truncation
+            assert "..." not in result.stdout or "..." in long_summary
