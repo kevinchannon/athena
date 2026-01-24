@@ -570,7 +570,11 @@ class CacheDatabase:
                 # FTS5 defaults to AND, so we need explicit OR operators
                 # Remove FTS5 special characters that could cause syntax errors
                 sanitized_query = re.sub(r'[^\w\s-]', ' ', query)
-                terms = [t for t in sanitized_query.split() if t and t.upper() not in ('OR', 'AND', 'NOT')]
+                # Filter out: empty strings, standalone hyphens, FTS5 operators, and tokens that are just punctuation
+                terms = [
+                    t for t in sanitized_query.split()
+                    if t and t != '-' and t.upper() not in ('OR', 'AND', 'NOT') and re.search(r'\w', t)
+                ]
                 or_query = " OR ".join(terms) if terms else ""
 
                 # Return empty if no valid terms
