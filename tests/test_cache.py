@@ -1313,73 +1313,154 @@ def test_query_fts_standard_bm25_ranking(cache_db):
     assert names[0] == "func1"
 
 
-def test_fts5_ranking_standard_corpus(cache_db):
-    """Test FTS5 ranking behavior against standard corpus.
+def test_fts5_ranking_fts_aligned(cache_db):
+    """Test FTS5 ranking behavior using rank-based ordering assertions.
 
-    Verifies that phrase matches rank higher than non-phrase matches,
-    and that multi-term matches rank higher than single-term matches.
+    Tests SQLite FTS5 ranking semantics by asserting relative ordering constraints
+    rather than absolute scores. Uses a 10-document corpus to verify phrase matches,
+    term coverage, and ordering behavior align with FTS5 guarantees.
 
-    Corpus: "the quick brown fox jumps over the lazy dog"
+    Based on "SQLite FTS5 Ranking Tests (Rank-Only, FTS5-Aligned)" specification.
     """
     file_id = cache_db.insert_file("src/example.py", 1234567890.0)
 
-    # Insert single corpus document
-    cache_db.insert_entities(file_id, [
-        CachedEntity(
-            file_id, "function", "corpus_func", "src/example.py:corpus_func",
-            10, 20, "the quick brown fox jumps over the lazy dog"
-        )
-    ])
-
-    # Get entity ID for later verification
-    cursor = cache_db.conn.execute("SELECT id FROM entities WHERE name = 'corpus_func'")
-    corpus_entity_id = cursor.fetchone()[0]
-
-    # Test phrase matches (queries 1-5) - should all return the entity
-    phrase_queries = [
-        "quick brown fox",           # 3 consecutive terms
-        "the quick brown fox jumps", # 4 consecutive terms (with stopword)
-        "brown fox jumps",           # 3 consecutive terms
-        "quick brown",               # 2 consecutive terms
-        "fox jumps over",            # 3 consecutive terms
+    # Create 10-document corpus
+    corpus_content = [
+        "one two three four five six",     # ID 1
+        "one two three",                   # ID 2
+        "four five six",                   # ID 3
+        "one three five",                  # ID 4
+        "two four six",                    # ID 5
+        "six five four three two one",     # ID 6
+        "one six",                         # ID 7
+        "three",                           # ID 8
+        "one",                             # ID 9
+        "the quick brown fox",             # ID 10
     ]
 
-    phrase_results = []
-    for query in phrase_queries:
-        results = cache_db.query_fts_phrase(query, limit=10)
-        phrase_results.append((query, results))
-        assert len(results) == 1, f"Phrase query '{query}' should match exactly once"
-        assert results[0] == corpus_entity_id, f"Phrase query '{query}' should match corpus entity"
+    # Insert corpus documents
+    entities = []
+    for i, content in enumerate(corpus_content, start=1):
+        entities.append(CachedEntity(
+            file_id, "function", f"func_{i}", f"src/example.py:func_{i}",
+            i * 10, i * 10 + 10, content
+        ))
+    cache_db.insert_entities(file_id, entities)
 
-    # Test non-phrase multi-term matches (queries 6-9) - should all return the entity via standard search
-    multi_term_queries = [
-        "quick fox",        # 2 terms, close proximity
-        "brown lazy",       # 2 terms, distant
-        "quick brown lazy", # 3 terms, not phrase
-        "fox dog",          # 2 terms, maximum distance
-    ]
+    # Get entity IDs in order
+    cursor = cache_db.conn.execute(
+        "SELECT id FROM entities WHERE file_id = ? ORDER BY name",
+        (file_id,)
+    )
+    entity_ids = [row[0] for row in cursor.fetchall()]
+    doc_ids = {i+1: entity_ids[i] for i in range(10)}
 
-    multi_term_results = []
-    for query in multi_term_queries:
-        results = cache_db.query_fts_standard(query, limit=10, exclude_ids=set())
-        multi_term_results.append((query, results))
-        assert len(results) == 1, f"Multi-term query '{query}' should match exactly once"
-        assert results[0] == corpus_entity_id, f"Multi-term query '{query}' should match corpus entity"
+    # Helper functions for rank-based assertions
+    def assert_before(results: list[int], doc_a: int, doc_b: int):
+        """Assert that doc_a appears before doc_b in results."""
+        entity_a = doc_ids[doc_a]
+        entity_b = doc_ids[doc_b]
+        assert entity_a in results, f"Doc {doc_a} not in results"
+        assert entity_b in results, f"Doc {doc_b} not in results"
+        idx_a = results.index(entity_a)
+        idx_b = results.index(entity_b)
+        assert idx_a < idx_b, f"Doc {doc_a} should appear before doc {doc_b}, but got positions {idx_a} and {idx_b}"
 
-    # Test single-term matches (queries 10-12) - should all return the entity
-    single_term_queries = ["quick", "brown", "lazy"]
+    def assert_set_equal(results: list[int], expected_docs: set[int]):
+        """Assert that result set equals expected document set."""
+        expected_entities = {doc_ids[d] for d in expected_docs}
+        actual_entities = set(results)
+        assert actual_entities == expected_entities, \
+            f"Expected docs {expected_docs}, got {[k for k, v in doc_ids.items() if v in actual_entities]}"
 
-    single_term_results = []
-    for query in single_term_queries:
-        results = cache_db.query_fts_standard(query, limit=10, exclude_ids=set())
-        single_term_results.append((query, results))
-        assert len(results) == 1, f"Single-term query '{query}' should match exactly once"
-        assert results[0] == corpus_entity_id, f"Single-term query '{query}' should match corpus entity"
+    def assert_all_before(results: list[int], set_a: set[int], set_b: set[int]):
+        """Assert that all docs in set_a appear before all docs in set_b."""
+        entities_a = {doc_ids[d] for d in set_a}
+        entities_b = {doc_ids[d] for d in set_b}
 
-    # Test no-match query (query 13)
-    no_match_results = cache_db.query_fts_standard("purple", limit=10, exclude_ids=set())
-    assert len(no_match_results) == 0, "Query 'purple' should return no results"
+        # Find max position of set_a and min position of set_b
+        max_a_pos = max((results.index(e) for e in entities_a if e in results), default=-1)
+        min_b_pos = min((results.index(e) for e in entities_b if e in results), default=len(results))
 
-    # Verify that phrase matches are preferred over standard matches
-    # This is implicit in the design: phrase search is done first, standard search excludes phrase results
-    # The test verifies both methods work correctly with the same corpus
+        assert max_a_pos < min_b_pos, \
+            f"All docs in {set_a} should appear before all docs in {set_b}"
+
+    def assert_excluded(results: list[int], excluded_doc: int):
+        """Assert that a document does not appear in results."""
+        entity = doc_ids[excluded_doc]
+        assert entity not in results, f"Doc {excluded_doc} should not appear in results"
+
+    def assert_before_or_equal(results: list[int], doc_a: int, doc_b: int):
+        """Assert that doc_a appears before or at same position as doc_b (for ties)."""
+        entity_a = doc_ids[doc_a]
+        entity_b = doc_ids[doc_b]
+        if entity_a in results and entity_b in results:
+            idx_a = results.index(entity_a)
+            idx_b = results.index(entity_b)
+            assert idx_a <= idx_b, f"Doc {doc_a} should appear before or equal to doc {doc_b}"
+
+    # Test 1: Exact phrase match (ordered, contiguous)
+    # Query: "one two three"
+    # Expected: Docs 1 and 2 are phrase matches, 6 is not (reversed order)
+    phrase_results = cache_db.query_fts_phrase("one two three", limit=10)
+    standard_results = cache_db.query_fts_standard("one two three", limit=10, exclude_ids=set(phrase_results))
+    combined_results = phrase_results + standard_results
+
+    # Docs {1,2} both appear before doc 4
+    assert_before(combined_results, 1, 4)
+    assert_before(combined_results, 2, 4)
+    # Docs {1,2} both appear before doc 6
+    assert_before(combined_results, 1, 6)
+    assert_before(combined_results, 2, 6)
+    # Doc 10 does not appear
+    assert_excluded(combined_results, 10)
+
+    # Test 2: No phrase, full term coverage
+    # Query: "one three five"
+    # Expected: Docs 1, 4, 6 contain all three terms
+    standard_results = cache_db.query_fts_standard("one three five", limit=10, exclude_ids=set())
+
+    # {1,4,6} all appear before any of {2,3,5,7,8,9}
+    assert_all_before(standard_results, {1, 4, 6}, {2, 3, 5, 7, 8, 9})
+    # Doc 10 excluded
+    assert_excluded(standard_results, 10)
+
+    # Test 3: Single-term query
+    # Query: "six"
+    # Expected: All and only docs containing "six" must match
+    standard_results = cache_db.query_fts_standard("six", limit=10, exclude_ids=set())
+
+    # Result set equals {1,3,5,6,7}
+    assert_set_equal(standard_results, {1, 3, 5, 6, 7})
+    # Doc 7 appears before or equal to doc 1 (shorter doc may rank higher)
+    assert_before_or_equal(standard_results, 7, 1)
+
+    # Test 4: Phrase plus additional term
+    # Query: "one two four"
+    # Expected: Phrase "one two" matches 1 and 2, but 1 contains all three terms
+    phrase_results = cache_db.query_fts_phrase("one two", limit=10)
+    standard_results = cache_db.query_fts_standard("one two four", limit=10, exclude_ids=set(phrase_results))
+    combined_results = phrase_results + standard_results
+
+    # Doc 1 appears before doc 2 (has all three terms vs two)
+    assert_before(combined_results, 1, 2)
+    # Doc 2 appears before doc 4
+    assert_before(combined_results, 2, 4)
+    # Doc 6 appears after doc 2
+    assert_before(combined_results, 2, 6)
+
+    # Test 5: Longer phrase match
+    # Query: "three four five six"
+    # Expected: Phrase matches only doc 1
+    phrase_results = cache_db.query_fts_phrase("three four five six", limit=10)
+    standard_results = cache_db.query_fts_standard("three four five six", limit=10, exclude_ids=set(phrase_results))
+    combined_results = phrase_results + standard_results
+
+    # Doc 1 appears before doc 3
+    assert_before(combined_results, 1, 3)
+    # Doc 3 appears before doc 6
+    assert_before(combined_results, 3, 6)
+    # Doc 6 appears before doc 4
+    assert_before(combined_results, 6, 4)
+    # Doc 10 excluded
+    assert_excluded(combined_results, 10)
