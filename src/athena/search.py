@@ -211,21 +211,26 @@ def _process_file_with_cache(
         entities = _parse_file_entities(file_path, source_code, relative_path)
 
         # Group file and entity insertion in a single transaction
-        with cache_db.transaction():
-            file_id = cache_db.insert_file(relative_path, current_mtime)
-            cached_entities = [
-                CachedEntity(
-                    file_id=file_id,
-                    kind=kind,
-                    name=relative_path,  # Using path as name for now
-                    entity_path=path,
-                    start=extent.start,
-                    end=extent.end,
-                    summary=docstring
-                )
-                for kind, path, extent, docstring in entities
-            ]
-            cache_db.insert_entities(file_id, cached_entities)
+        try:
+            with cache_db.transaction():
+                file_id = cache_db.insert_file(relative_path, current_mtime)
+                cached_entities = [
+                    CachedEntity(
+                        file_id=file_id,
+                        kind=kind,
+                        name=relative_path,  # Using path as name for now
+                        entity_path=path,
+                        start=extent.start,
+                        end=extent.end,
+                        summary=docstring
+                    )
+                    for kind, path, extent, docstring in entities
+                ]
+                cache_db.insert_entities(file_id, cached_entities)
+        except sqlite3.IntegrityError:
+            # File was inserted by another thread - this is fine in concurrent scenarios
+            # Return empty list since entities are already cached
+            pass
 
         return entities
 

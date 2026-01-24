@@ -179,17 +179,18 @@ class CacheDatabase:
                 self._in_transaction = was_in_transaction
 
     def insert_file(self, file_path: str, mtime: float) -> int:
-        """Insert a new file record or get existing file_id if already exists.
+        """Insert a new file record.
 
         Args:
             file_path: Relative path to the file from repository root
             mtime: File modification time
 
         Returns:
-            The file_id of the inserted or existing record
+            The file_id of the inserted record
 
         Raises:
             RuntimeError: If database connection not initialized.
+            sqlite3.IntegrityError: If file_path already exists (UNIQUE constraint).
             sqlite3.Error: If database operation fails.
         """
         if self.conn is None:
@@ -197,27 +198,19 @@ class CacheDatabase:
 
         with self._lock:
             try:
-                # Use INSERT OR IGNORE to handle concurrent inserts
                 cursor = self.conn.execute(
-                    "INSERT OR IGNORE INTO files (file_path, mtime) VALUES (?, ?)",
+                    "INSERT INTO files (file_path, mtime) VALUES (?, ?)",
                     (file_path, mtime)
                 )
                 if not self._in_transaction:
                     self.conn.commit()
-
-                # If lastrowid is 0, the file already existed, so fetch its id
-                if cursor.lastrowid == 0:
-                    cursor = self.conn.execute(
-                        "SELECT id FROM files WHERE file_path = ?",
-                        (file_path,)
-                    )
-                    row = cursor.fetchone()
-                    if row:
-                        return row[0]
-                    # Should not happen, but raise if we can't find the file
-                    raise sqlite3.Error(f"File {file_path} not found after INSERT OR IGNORE")
-
                 return cursor.lastrowid
+            except sqlite3.IntegrityError:
+                # UNIQUE constraint - file already exists
+                # This is expected in concurrent scenarios
+                if not self._in_transaction:
+                    self.conn.rollback()
+                raise
             except sqlite3.Error as e:
                 logger.error(f"Failed to insert file {file_path}: {e}")
                 if not self._in_transaction:
@@ -577,7 +570,7 @@ class CacheDatabase:
                 # FTS5 defaults to AND, so we need explicit OR operators
                 # Remove FTS5 special characters that could cause syntax errors
                 sanitized_query = re.sub(r'[^\w\s-]', ' ', query)
-                terms = sanitized_query.split()
+                terms = [t for t in sanitized_query.split() if t and t.upper() not in ('OR', 'AND', 'NOT')]
                 or_query = " OR ".join(terms) if terms else ""
 
                 # Return empty if no valid terms

@@ -1,5 +1,6 @@
 """Tests for the SQLite cache database."""
 
+import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -102,11 +103,11 @@ def test_file_lookup_nonexistent(cache_db):
 
 
 def test_duplicate_file_insertion(cache_db):
-    """Test that duplicate file paths raise an error."""
+    """Test that duplicate file paths raise an IntegrityError."""
     cache_db.insert_file("src/example.py", 1234567890.0)
 
-    # Attempting to insert same path should fail
-    with pytest.raises(Exception):  # sqlite3.IntegrityError
+    # Attempting to insert same path should fail with IntegrityError
+    with pytest.raises(sqlite3.IntegrityError):
         cache_db.insert_file("src/example.py", 9999999999.0)
 
 
