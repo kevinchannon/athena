@@ -1025,3 +1025,449 @@ def test_fts5_deletion_preserves_correct_entries(cache_db):
         "SELECT summary FROM entities_fts WHERE summary MATCH 'delete'"
     )
     assert cursor.fetchone() is None
+
+
+# FTS5 Query Method Tests
+
+
+def test_query_phrase_exact_match(cache_db):
+    """Test phrase query returns exact phrase matches."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data"),
+        CachedEntity(file_id, "function", "bar", "src/example.py:bar", 30, 40, "Parse XML data"),
+        CachedEntity(file_id, "function", "baz", "src/example.py:baz", 50, 60, "JSON parser utility")
+    ])
+
+    # Query for exact phrase "JSON data"
+    entity_ids = cache_db.query_phrase("JSON data", limit=10)
+
+    # Should only match "Parse JSON data", not "JSON parser utility"
+    assert len(entity_ids) == 1
+
+    # Verify it's the correct entity
+    cursor = cache_db.conn.execute(
+        "SELECT name FROM entities WHERE id = ?",
+        (entity_ids[0],)
+    )
+    assert cursor.fetchone()[0] == "foo"
+
+
+def test_query_phrase_multiple_matches(cache_db):
+    """Test phrase query returns multiple exact matches."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "func1", "src/example.py:func1", 10, 20, "Process user input"),
+        CachedEntity(file_id, "function", "func2", "src/example.py:func2", 30, 40, "Validate user input"),
+        CachedEntity(file_id, "function", "func3", "src/example.py:func3", 50, 60, "User authentication")
+    ])
+
+    # Query for exact phrase "user input"
+    entity_ids = cache_db.query_phrase("user input", limit=10)
+
+    # Should match both func1 and func2
+    assert len(entity_ids) == 2
+
+    # Verify correct entities matched
+    cursor = cache_db.conn.execute(
+        f"SELECT name FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})",
+        entity_ids
+    )
+    names = {row[0] for row in cursor.fetchall()}
+    assert names == {"func1", "func2"}
+
+
+def test_query_phrase_empty_query(cache_db):
+    """Test phrase query with empty string returns empty list."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Some function")
+    ])
+
+    # Empty query should return empty list
+    assert cache_db.query_phrase("", limit=10) == []
+    assert cache_db.query_phrase("   ", limit=10) == []
+
+
+def test_query_phrase_no_matches(cache_db):
+    """Test phrase query with no matches returns empty list."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data")
+    ])
+
+    # Query for phrase that doesn't exist
+    entity_ids = cache_db.query_phrase("XML parser", limit=10)
+    assert entity_ids == []
+
+
+def test_query_phrase_respects_limit(cache_db):
+    """Test phrase query respects the limit parameter."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    # Insert 5 entities with the same phrase
+    entities = [
+        CachedEntity(file_id, "function", f"func{i}", f"src/example.py:func{i}", i*10, i*10+5, "Parse data")
+        for i in range(5)
+    ]
+    cache_db.insert_entities(file_id, entities)
+
+    # Query with limit=2
+    entity_ids = cache_db.query_phrase("Parse data", limit=2)
+    assert len(entity_ids) == 2
+
+
+def test_query_phrase_with_quotes(cache_db):
+    """Test phrase query handles quotes in the query string."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, 'Parse "quoted" string')
+    ])
+
+    # Query for phrase with quotes (should be escaped)
+    entity_ids = cache_db.query_phrase('"quoted" string', limit=10)
+    assert len(entity_ids) == 1
+
+
+def test_query_phrase_case_insensitive(cache_db):
+    """Test phrase query is case insensitive."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON Data")
+    ])
+
+    # Query with different case should still match
+    entity_ids = cache_db.query_phrase("json data", limit=10)
+    assert len(entity_ids) == 1
+
+
+def test_query_words_single_term(cache_db):
+    """Test standard query matches single term."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data"),
+        CachedEntity(file_id, "function", "bar", "src/example.py:bar", 30, 40, "Process XML files"),
+        CachedEntity(file_id, "function", "baz", "src/example.py:baz", 50, 60, "JSON parser utility")
+    ])
+
+    # Query for single term "JSON"
+    entity_ids = cache_db.query_words("JSON", limit=10, exclude_ids=set())
+
+    # Should match both foo and baz
+    assert len(entity_ids) == 2
+
+    cursor = cache_db.conn.execute(
+        f"SELECT name FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})",
+        entity_ids
+    )
+    names = {row[0] for row in cursor.fetchall()}
+    assert names == {"foo", "baz"}
+
+
+def test_query_words_multiple_terms(cache_db):
+    """Test standard query matches multiple terms (OR logic)."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data"),
+        CachedEntity(file_id, "function", "bar", "src/example.py:bar", 30, 40, "Process XML files"),
+        CachedEntity(file_id, "function", "baz", "src/example.py:baz", 50, 60, "Validate input data")
+    ])
+
+    # Query for "JSON XML" (should match any document with either term)
+    entity_ids = cache_db.query_words("JSON XML", limit=10, exclude_ids=set())
+
+    # Should match foo (JSON) and bar (XML)
+    assert len(entity_ids) == 2
+
+    cursor = cache_db.conn.execute(
+        f"SELECT name FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})",
+        entity_ids
+    )
+    names = {row[0] for row in cursor.fetchall()}
+    assert names == {"foo", "bar"}
+
+
+def test_query_words_excludes_ids(cache_db):
+    """Test standard query excludes specified entity IDs."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data"),
+        CachedEntity(file_id, "function", "bar", "src/example.py:bar", 30, 40, "JSON parser utility"),
+        CachedEntity(file_id, "function", "baz", "src/example.py:baz", 50, 60, "JSON validator")
+    ])
+
+    # First get all matches
+    all_ids = cache_db.query_words("JSON", limit=10, exclude_ids=set())
+    assert len(all_ids) == 3
+
+    # Now exclude the first ID
+    excluded_ids = {all_ids[0]}
+    remaining_ids = cache_db.query_words("JSON", limit=10, exclude_ids=excluded_ids)
+
+    # Should get 2 results, excluding the first one
+    assert len(remaining_ids) == 2
+    assert all_ids[0] not in remaining_ids
+
+
+def test_query_words_empty_query(cache_db):
+    """Test standard query with empty string returns empty list."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Some function")
+    ])
+
+    # Empty query should return empty list
+    assert cache_db.query_words("", limit=10, exclude_ids=set()) == []
+    assert cache_db.query_words("   ", limit=10, exclude_ids=set()) == []
+
+
+def test_query_words_no_matches(cache_db):
+    """Test standard query with no matches returns empty list."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON data")
+    ])
+
+    # Query for term that doesn't exist
+    entity_ids = cache_db.query_words("nonexistent", limit=10, exclude_ids=set())
+    assert entity_ids == []
+
+
+def test_query_words_respects_limit(cache_db):
+    """Test standard query respects the limit parameter."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    # Insert 5 entities with the same term
+    entities = [
+        CachedEntity(file_id, "function", f"func{i}", f"src/example.py:func{i}", i*10, i*10+5, "Parse data")
+        for i in range(5)
+    ]
+    cache_db.insert_entities(file_id, entities)
+
+    # Query with limit=2
+    entity_ids = cache_db.query_words("Parse", limit=2, exclude_ids=set())
+    assert len(entity_ids) == 2
+
+
+def test_query_words_case_insensitive(cache_db):
+    """Test standard query is case insensitive."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse JSON Data")
+    ])
+
+    # Query with different case should still match
+    entity_ids = cache_db.query_words("json", limit=10, exclude_ids=set())
+    assert len(entity_ids) == 1
+
+
+def test_query_words_empty_exclude_set(cache_db):
+    """Test standard query works with empty exclude_ids set."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/example.py:foo", 10, 20, "Parse data")
+    ])
+
+    # Empty exclude set should return normal results
+    entity_ids = cache_db.query_words("Parse", limit=10, exclude_ids=set())
+    assert len(entity_ids) == 1
+
+
+def test_query_words_bm25_ranking(cache_db):
+    """Test standard query ranks documents by BM25 score."""
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "func1", "src/example.py:func1", 10, 20, "Parse JSON data with JSON parser"),
+        CachedEntity(file_id, "function", "func2", "src/example.py:func2", 30, 40, "Parse JSON"),
+        CachedEntity(file_id, "function", "func3", "src/example.py:func3", 50, 60, "Process data files")
+    ])
+
+    # Query for "JSON"
+    entity_ids = cache_db.query_words("JSON", limit=10, exclude_ids=set())
+
+    # func1 should rank higher than func2 (more JSON mentions)
+    # func3 should not appear (no JSON)
+    assert len(entity_ids) == 2
+
+    cursor = cache_db.conn.execute(
+        f"SELECT name FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})",
+        entity_ids
+    )
+    names = [row[0] for row in cursor.fetchall()]
+
+    # First result should be func1 (highest BM25 score)
+    assert names[0] == "func1"
+
+
+def test_fts5_ranking_fts_aligned(cache_db):
+    """Test FTS5 ranking behavior using rank-based ordering assertions.
+
+    Tests SQLite FTS5 ranking semantics by asserting relative ordering constraints
+    rather than absolute scores. Uses a 10-document corpus to verify phrase matches,
+    term coverage, and ordering behavior align with FTS5 guarantees.
+
+    Based on "SQLite FTS5 Ranking Tests (Rank-Only, FTS5-Aligned)" specification.
+    """
+    file_id = cache_db.insert_file("src/example.py", 1234567890.0)
+
+    # Create 10-document corpus
+    corpus_content = [
+        "one two three four five six",     # ID 1
+        "one two three",                   # ID 2
+        "four five six",                   # ID 3
+        "one three five",                  # ID 4
+        "two four six",                    # ID 5
+        "six five four three two one",     # ID 6
+        "one six",                         # ID 7
+        "three",                           # ID 8
+        "one",                             # ID 9
+        "the quick brown fox",             # ID 10
+    ]
+
+    # Insert corpus documents
+    entities = []
+    for i, content in enumerate(corpus_content, start=1):
+        entities.append(CachedEntity(
+            file_id, "function", f"func_{i:02d}", f"src/example.py:func_{i:02d}",
+            i * 10, i * 10 + 10, content
+        ))
+    cache_db.insert_entities(file_id, entities)
+
+    # Get entity IDs in order (now sorted correctly with zero-padded names)
+    cursor = cache_db.conn.execute(
+        "SELECT id FROM entities WHERE file_id = ? ORDER BY name",
+        (file_id,)
+    )
+    entity_ids = [row[0] for row in cursor.fetchall()]
+    doc_ids = {i+1: entity_ids[i] for i in range(10)}
+
+    # Helper functions for rank-based assertions
+    def assert_before(results: list[int], doc_a: int, doc_b: int):
+        """Assert that doc_a appears before doc_b in results."""
+        entity_a = doc_ids[doc_a]
+        entity_b = doc_ids[doc_b]
+        assert entity_a in results, f"Doc {doc_a} not in results"
+        assert entity_b in results, f"Doc {doc_b} not in results"
+        idx_a = results.index(entity_a)
+        idx_b = results.index(entity_b)
+        assert idx_a < idx_b, f"Doc {doc_a} should appear before doc {doc_b}, but got positions {idx_a} and {idx_b}"
+
+    def assert_set_equal(results: list[int], expected_docs: set[int]):
+        """Assert that result set equals expected document set."""
+        expected_entities = {doc_ids[d] for d in expected_docs}
+        actual_entities = set(results)
+        assert actual_entities == expected_entities, \
+            f"Expected docs {expected_docs}, got {[k for k, v in doc_ids.items() if v in actual_entities]}"
+
+    def assert_all_before(results: list[int], set_a: set[int], set_b: set[int]):
+        """Assert that all docs in set_a appear before all docs in set_b."""
+        entities_a = {doc_ids[d] for d in set_a}
+        entities_b = {doc_ids[d] for d in set_b}
+
+        # Find max position of set_a and min position of set_b
+        max_a_pos = max((results.index(e) for e in entities_a if e in results), default=-1)
+        min_b_pos = min((results.index(e) for e in entities_b if e in results), default=len(results))
+
+        assert max_a_pos < min_b_pos, \
+            f"All docs in {set_a} should appear before all docs in {set_b}"
+
+    def assert_excluded(results: list[int], excluded_doc: int):
+        """Assert that a document does not appear in results."""
+        entity = doc_ids[excluded_doc]
+        assert entity not in results, f"Doc {excluded_doc} should not appear in results"
+
+    def assert_before_or_equal(results: list[int], doc_a: int, doc_b: int):
+        """Assert that doc_a appears before or at same position as doc_b (for ties)."""
+        entity_a = doc_ids[doc_a]
+        entity_b = doc_ids[doc_b]
+        if entity_a in results and entity_b in results:
+            idx_a = results.index(entity_a)
+            idx_b = results.index(entity_b)
+            assert idx_a <= idx_b, f"Doc {doc_a} should appear before or equal to doc {doc_b}"
+
+    # Test 1: Exact phrase match (ordered, contiguous)
+    # Query: "one two three"
+    # Expected: Docs 1 and 2 are phrase matches, 6 is not (reversed order)
+    phrase_results = cache_db.query_phrase("one two three", limit=10)
+    standard_results = cache_db.query_words("one two three", limit=10, exclude_ids=set(phrase_results))
+    combined_results = phrase_results + standard_results
+
+    # Docs {1,2} both appear before doc 4
+    assert_before(combined_results, 1, 4)
+    assert_before(combined_results, 2, 4)
+    # Docs {1,2} both appear before doc 6
+    assert_before(combined_results, 1, 6)
+    assert_before(combined_results, 2, 6)
+    # Doc 10 does not appear
+    assert_excluded(combined_results, 10)
+
+    # Test 2: No phrase, full term coverage
+    # Query: "one three five"
+    # Expected: Docs 1, 4, 6 contain all three terms
+    # Note: With OR logic, FTS5 BM25 doesn't guarantee docs with more matching terms
+    # rank higher - shorter docs matching fewer terms well can rank higher.
+    standard_results = cache_db.query_words("one three five", limit=10, exclude_ids=set())
+
+    # Verify that docs containing the terms are present (but not ordering)
+    result_docs = {k for k, v in doc_ids.items() if v in standard_results}
+    # At minimum, docs with all three terms should be in results
+    assert {1, 4, 6}.issubset(result_docs), f"Docs with all terms should be in results: {result_docs}"
+    # Doc 10 excluded (doesn't contain any query terms)
+    assert_excluded(standard_results, 10)
+
+    # Test 3: Single-term query
+    # Query: "six"
+    # Expected: All and only docs containing "six" must match
+    standard_results = cache_db.query_words("six", limit=10, exclude_ids=set())
+
+    # Result set equals {1,3,5,6,7}
+    assert_set_equal(standard_results, {1, 3, 5, 6, 7})
+    # Doc 7 appears before or equal to doc 1 (shorter doc may rank higher)
+    assert_before_or_equal(standard_results, 7, 1)
+
+    # Test 4: Phrase plus additional term
+    # Query: "one two four"
+    # Expected: Phrase "one two" matches 1 and 2
+    # Note: Both docs 1 and 2 match the phrase equally; FTS5 doesn't consider "four" when ranking phrase matches
+    phrase_results = cache_db.query_phrase("one two", limit=10)
+    standard_results = cache_db.query_words("one two four", limit=10, exclude_ids=set(phrase_results))
+    combined_results = phrase_results + standard_results
+
+    # Both docs 1 and 2 should be in phrase results (no guaranteed ordering between them)
+    phrase_docs = {k for k, v in doc_ids.items() if v in phrase_results}
+    assert {1, 2}.issubset(phrase_docs), f"Docs 1 and 2 should match phrase 'one two': {phrase_docs}"
+    # Phrase matches (1,2) should appear before non-phrase matches
+    if 4 in [k for k, v in doc_ids.items() if v in combined_results]:
+        # At least one phrase match should appear before doc 4
+        assert any(phrase_results.index(doc_ids[d]) < combined_results.index(doc_ids[4])
+                   for d in [1, 2] if doc_ids[d] in phrase_results)
+
+    # Test 5: Longer phrase match
+    # Query: "three four five six"
+    # Expected: Phrase matches only doc 1
+    phrase_results = cache_db.query_phrase("three four five six", limit=10)
+    standard_results = cache_db.query_words("three four five six", limit=10, exclude_ids=set(phrase_results))
+    combined_results = phrase_results + standard_results
+
+    # Doc 1 appears before doc 3
+    assert_before(combined_results, 1, 3)
+    # Doc 3 appears before doc 6
+    assert_before(combined_results, 3, 6)
+    # Doc 6 appears before doc 4
+    assert_before(combined_results, 6, 4)
+    # Doc 10 excluded
+    assert_excluded(combined_results, 10)

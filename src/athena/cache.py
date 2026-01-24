@@ -454,3 +454,107 @@ class CacheDatabase:
             except sqlite3.Error as e:
                 logger.error(f"Failed to retrieve entities: {e}")
                 raise
+
+    def query_phrase(self, query: str, limit: int) -> list[int]:
+        """Query for exact phrase matches.
+
+        Uses FTS5 phrase syntax to find entities where the summary contains
+        the exact query string as a phrase. Results are ranked by BM25.
+
+        Args:
+            query: Search query string (will be searched as exact phrase)
+            limit: Maximum number of entity IDs to return
+
+        Returns:
+            List of entity IDs matching the phrase, ordered by BM25 rank (best first)
+
+        Raises:
+            RuntimeError: If database connection not initialized.
+            sqlite3.Error: If database operation fails.
+        """
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
+
+        if not query or not query.strip():
+            return []
+
+        with self._lock:
+            try:
+                # Escape quotes in the query and wrap in FTS5 phrase syntax
+                escaped_query = query.replace('"', '""')
+                phrase_query = f'"{escaped_query}"'
+
+                cursor = self.conn.execute(
+                    """
+                    SELECT entity_id
+                    FROM entities_fts
+                    WHERE summary MATCH ?
+                    ORDER BY rank
+                    LIMIT ?
+                    """,
+                    (phrase_query, limit)
+                )
+                return [row[0] for row in cursor.fetchall()]
+            except sqlite3.Error as e:
+                logger.error(f"Failed to execute FTS5 phrase query '{query}': {e}")
+                raise
+
+    def query_words(self, query: str, limit: int, exclude_ids: set[int]) -> list[int]:
+        """Query for individual words (OR'd together).
+
+        Terms can appear anywhere in the text. Results are ranked by BM25.
+
+        Args:
+            query: Search query string (terms will be OR'd together)
+            limit: Maximum number of entity IDs to return
+            exclude_ids: Set of entity IDs to exclude from results (e.g., already matched by phrase search)
+
+        Returns:
+            List of entity IDs matching the query, ordered by BM25 rank (best first),
+            excluding any IDs in exclude_ids
+
+        Raises:
+            RuntimeError: If database connection not initialized.
+            sqlite3.Error: If database operation fails.
+        """
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
+
+        if not query or not query.strip():
+            return []
+
+        with self._lock:
+            try:
+                # Transform query to OR multiple terms together
+                # FTS5 defaults to AND, so we need explicit OR operators
+                terms = query.split()
+                or_query = " OR ".join(terms)
+
+                if exclude_ids:
+                    placeholders = ",".join("?" * len(exclude_ids))
+                    cursor = self.conn.execute(
+                        f"""
+                        SELECT entity_id
+                        FROM entities_fts
+                        WHERE summary MATCH ?
+                        AND entity_id NOT IN ({placeholders})
+                        ORDER BY rank
+                        LIMIT ?
+                        """,
+                        (or_query, *exclude_ids, limit)
+                    )
+                else:
+                    cursor = self.conn.execute(
+                        """
+                        SELECT entity_id
+                        FROM entities_fts
+                        WHERE summary MATCH ?
+                        ORDER BY rank
+                        LIMIT ?
+                        """,
+                        (or_query, limit)
+                    )
+                return [row[0] for row in cursor.fetchall()]
+            except sqlite3.Error as e:
+                logger.error(f"Failed to execute FTS5 standard query '{or_query}' (original: '{query}'): {e}")
+                raise
