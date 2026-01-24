@@ -9,33 +9,12 @@ import yaml
 
 @dataclass
 class SearchConfig:
-    """Configuration for BM25 search parameters.
+    """Configuration for FTS5 search.
 
     Attributes:
-        term_frequency_saturation: Controls how quickly term frequency
-            influence saturates (k1 parameter in BM25). Range: [1.2, 2.0].
-        length_normalization: Controls document length normalization
-            (b parameter in BM25). Range: [0.5, 0.75].
         max_results: Maximum number of search results to return.
     """
-    term_frequency_saturation: float = 1.5
-    length_normalization: float = 0.75
     max_results: int = 10
-
-    @property
-    def k1(self) -> float:
-        """BM25 k1 parameter (term frequency saturation)."""
-        return self.term_frequency_saturation
-
-    @property
-    def b(self) -> float:
-        """BM25 b parameter (length normalization)."""
-        return self.length_normalization
-
-    @property
-    def k(self) -> int:
-        """Number of results to return."""
-        return self.max_results
 
 
 def load_search_config(repo_root: Path | None = None) -> SearchConfig:
@@ -53,8 +32,6 @@ def load_search_config(repo_root: Path | None = None) -> SearchConfig:
 
         ```yaml
         search:
-          term_frequency_saturation: 1.5
-          length_normalization: 0.75
           max_results: 10
         ```
     """
@@ -78,14 +55,6 @@ def load_search_config(repo_root: Path | None = None) -> SearchConfig:
             return SearchConfig()
 
         return SearchConfig(
-            term_frequency_saturation=search_config.get(
-                "term_frequency_saturation",
-                SearchConfig.term_frequency_saturation
-            ),
-            length_normalization=search_config.get(
-                "length_normalization",
-                SearchConfig.length_normalization
-            ),
             max_results=search_config.get(
                 "max_results",
                 SearchConfig.max_results

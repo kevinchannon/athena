@@ -91,9 +91,7 @@ Search also supports JSON output for programmatic use:
 Configuration can be customized via a `.athena` file in your repository root:
 ```yaml
 search:
-  term_frequency_saturation: 1.5  # BM25 k1 parameter (1.2-2.0)
-  length_normalization: 0.75      # BM25 b parameter (0.5-0.75)
-  max_results: 10                 # Default number of results
+  max_results: 10  # Default number of results
 ```
 
 Once you know where a thing is, then you can ask for info about it:

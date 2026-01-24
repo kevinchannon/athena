@@ -97,11 +97,7 @@ def search(
         if max_results is not None:
             # Create new config with overridden max_results
             from athena.config import SearchConfig
-            config = SearchConfig(
-                term_frequency_saturation=config.k1,
-                length_normalization=config.b,
-                max_results=max_results
-            )
+            config = SearchConfig(max_results=max_results)
 
         results = search_docstrings(query, config=config)
 

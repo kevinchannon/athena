@@ -14,35 +14,12 @@ class TestSearchConfig:
     def test_default_values(self):
         """Test that SearchConfig has correct default values."""
         config = SearchConfig()
-        assert config.term_frequency_saturation == 1.5
-        assert config.length_normalization == 0.75
         assert config.max_results == 10
 
     def test_custom_values(self):
         """Test creating SearchConfig with custom values."""
-        config = SearchConfig(
-            term_frequency_saturation=1.8,
-            length_normalization=0.6,
-            max_results=20
-        )
-        assert config.term_frequency_saturation == 1.8
-        assert config.length_normalization == 0.6
-        assert config.max_results == 20
-
-    def test_k1_property(self):
-        """Test k1 property returns term_frequency_saturation."""
-        config = SearchConfig(term_frequency_saturation=1.8)
-        assert config.k1 == 1.8
-
-    def test_b_property(self):
-        """Test b property returns length_normalization."""
-        config = SearchConfig(length_normalization=0.6)
-        assert config.b == 0.6
-
-    def test_k_property(self):
-        """Test k property returns max_results."""
         config = SearchConfig(max_results=20)
-        assert config.k == 20
+        assert config.max_results == 20
 
 
 class TestLoadSearchConfig:
@@ -52,8 +29,6 @@ class TestLoadSearchConfig:
         """Test that missing .athena file returns default config."""
         with TemporaryDirectory() as tmpdir:
             config = load_search_config(Path(tmpdir))
-            assert config.term_frequency_saturation == 1.5
-            assert config.length_normalization == 0.75
             assert config.max_results == 10
 
     def test_load_valid_config(self):
@@ -62,26 +37,20 @@ class TestLoadSearchConfig:
             config_path = Path(tmpdir) / ".athena"
             config_path.write_text("""
 search:
-  term_frequency_saturation: 1.8
-  length_normalization: 0.6
   max_results: 20
 """)
             config = load_search_config(Path(tmpdir))
-            assert config.term_frequency_saturation == 1.8
-            assert config.length_normalization == 0.6
             assert config.max_results == 20
 
     def test_load_partial_config(self):
-        """Test loading config with only some values specified."""
+        """Test loading config with missing max_results uses default."""
         with TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / ".athena"
             config_path.write_text("""
 search:
-  term_frequency_saturation: 1.8
+  other_field: ignored
 """)
             config = load_search_config(Path(tmpdir))
-            assert config.term_frequency_saturation == 1.8
-            assert config.length_normalization == 0.75  # default
             assert config.max_results == 10  # default
 
     def test_empty_config_file_returns_defaults(self):
@@ -90,8 +59,6 @@ search:
             config_path = Path(tmpdir) / ".athena"
             config_path.write_text("")
             config = load_search_config(Path(tmpdir))
-            assert config.term_frequency_saturation == 1.5
-            assert config.length_normalization == 0.75
             assert config.max_results == 10
 
     def test_missing_search_section_returns_defaults(self):
@@ -103,8 +70,6 @@ other_section:
   some_key: some_value
 """)
             config = load_search_config(Path(tmpdir))
-            assert config.term_frequency_saturation == 1.5
-            assert config.length_normalization == 0.75
             assert config.max_results == 10
 
     def test_invalid_yaml_returns_defaults(self):
@@ -113,8 +78,6 @@ other_section:
             config_path = Path(tmpdir) / ".athena"
             config_path.write_text("invalid: yaml: content: [")
             config = load_search_config(Path(tmpdir))
-            assert config.term_frequency_saturation == 1.5
-            assert config.length_normalization == 0.75
             assert config.max_results == 10
 
     def test_wrong_type_search_section_returns_defaults(self):
@@ -123,8 +86,6 @@ other_section:
             config_path = Path(tmpdir) / ".athena"
             config_path.write_text("search: not_a_dict")
             config = load_search_config(Path(tmpdir))
-            assert config.term_frequency_saturation == 1.5
-            assert config.length_normalization == 0.75
             assert config.max_results == 10
 
     def test_wrong_type_root_returns_defaults(self):
@@ -133,8 +94,6 @@ other_section:
             config_path = Path(tmpdir) / ".athena"
             config_path.write_text("- list\n- not\n- dict")
             config = load_search_config(Path(tmpdir))
-            assert config.term_frequency_saturation == 1.5
-            assert config.length_normalization == 0.75
             assert config.max_results == 10
 
     def test_none_repo_root_uses_cwd(self):
@@ -152,8 +111,6 @@ other_section:
             try:
                 config_path.chmod(0o000)
                 config = load_search_config(Path(tmpdir))
-                assert config.term_frequency_saturation == 1.5
-                assert config.length_normalization == 0.75
                 assert config.max_results == 10
             finally:
                 # Restore permissions for cleanup
@@ -165,11 +122,9 @@ other_section:
             config_path = Path(tmpdir) / ".athena"
             config_path.write_text("""
 search:
-  term_frequency_saturation: 1.8
   extra_field: ignored
   max_results: 20
 """)
             config = load_search_config(Path(tmpdir))
-            assert config.term_frequency_saturation == 1.8
             assert config.max_results == 20
             assert not hasattr(config, 'extra_field')
