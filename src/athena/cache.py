@@ -55,25 +55,48 @@ class CacheDatabase:
     def _open(self) -> None:
         """Open database connection and initialize schema.
 
+        Retries on "database is locked" errors to handle concurrent cache creation.
+
         Raises:
-            sqlite3.Error: If database cannot be opened or initialized.
+            sqlite3.Error: If database cannot be opened or initialized after retries.
         """
-        try:
-            self.conn = sqlite3.connect(
-                str(self.db_path),
-                check_same_thread=False,
-                timeout=10.0  # 10 second timeout for busy database
-            )
-            self.conn.execute("PRAGMA foreign_keys = ON")
-            self.conn.execute("PRAGMA journal_mode = WAL")
-            self.conn.execute("PRAGMA busy_timeout = 10000")  # 10 seconds in milliseconds
-            self.create_tables()
-        except sqlite3.Error as e:
-            logger.error(f"Failed to open cache database at {self.db_path}: {e}")
-            if self.conn:
-                self.conn.close()
-                self.conn = None
-            raise
+        import time
+
+        max_retries = 3
+        retry_delay = 0.1  # 100ms
+
+        for attempt in range(max_retries):
+            try:
+                self.conn = sqlite3.connect(
+                    str(self.db_path),
+                    check_same_thread=False,
+                    timeout=10.0  # 10 second timeout for busy database
+                )
+                self.conn.execute("PRAGMA foreign_keys = ON")
+                self.conn.execute("PRAGMA journal_mode = WAL")
+                self.conn.execute("PRAGMA busy_timeout = 10000")  # 10 seconds in milliseconds
+                self.create_tables()
+                return  # Success
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    # Retry after a brief delay
+                    if self.conn:
+                        self.conn.close()
+                        self.conn = None
+                    time.sleep(retry_delay)
+                    continue
+                # Re-raise if not a lock error or out of retries
+                logger.error(f"Failed to open cache database at {self.db_path}: {e}")
+                if self.conn:
+                    self.conn.close()
+                    self.conn = None
+                raise
+            except sqlite3.Error as e:
+                logger.error(f"Failed to open cache database at {self.db_path}: {e}")
+                if self.conn:
+                    self.conn.close()
+                    self.conn = None
+                raise
 
     def create_tables(self) -> None:
         """Create database schema if it doesn't exist."""
