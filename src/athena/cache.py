@@ -455,8 +455,8 @@ class CacheDatabase:
                 logger.error(f"Failed to retrieve entities: {e}")
                 raise
 
-    def query_fts_phrase(self, query: str, limit: int) -> list[int]:
-        """Query FTS5 table for exact phrase matches.
+    def query_phrase(self, query: str, limit: int) -> list[int]:
+        """Query for exact phrase matches.
 
         Uses FTS5 phrase syntax to find entities where the summary contains
         the exact query string as a phrase. Results are ranked by BM25.
@@ -499,11 +499,10 @@ class CacheDatabase:
                 logger.error(f"Failed to execute FTS5 phrase query '{query}': {e}")
                 raise
 
-    def query_fts_standard(self, query: str, limit: int, exclude_ids: set[int]) -> list[int]:
-        """Query FTS5 table with standard full-text search.
+    def query_words(self, query: str, limit: int, exclude_ids: set[int]) -> list[int]:
+        """Query for individual words (OR'd together).
 
-        Uses standard FTS5 matching (terms can appear anywhere). Results are
-        ranked by BM25, with documents matching more terms ranked higher.
+        Terms can appear anywhere in the text. Results are ranked by BM25.
 
         Args:
             query: Search query string (terms will be OR'd together)
