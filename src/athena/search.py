@@ -300,8 +300,12 @@ def _scan_repo_with_cache(root: Path, cache_db: CacheDatabase) -> list[tuple[str
     # Clean up deleted files from cache
     cache_db.delete_files_not_in(seen_files)
 
-    # Return empty list - we'll query FTS5 directly instead of loading all entities
-    return []
+    # Return all entities from cache
+    all_entities = cache_db.get_all_entities()
+    return [
+        (kind, path, Location(start=start, end=end), summary)
+        for kind, path, start, end, summary in all_entities
+    ]
 
 
 
