@@ -430,6 +430,39 @@ class CacheDatabase:
                     self.conn.rollback()
                 raise
 
+    def get_entity_by_id(self, entity_id: int) -> tuple[str, str, int, int, str] | None:
+        """Retrieve a single entity by its ID.
+
+        Args:
+            entity_id: The entity ID to retrieve
+
+        Returns:
+            Tuple (kind, path, start, end, summary) if entity exists, None otherwise
+
+        Raises:
+            RuntimeError: If database connection not initialized.
+            sqlite3.Error: If database operation fails.
+        """
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
+
+        with self._lock:
+            try:
+                cursor = self.conn.execute(
+                    """
+                    SELECT e.kind, f.file_path, e.start, e.end, e.summary
+                    FROM entities e
+                    JOIN files f ON e.file_id = f.id
+                    WHERE e.id = ?
+                    """,
+                    (entity_id,)
+                )
+                result = cursor.fetchone()
+                return result if result else None
+            except sqlite3.Error as e:
+                logger.error(f"Failed to retrieve entity {entity_id}: {e}")
+                raise
+
     def get_all_entities(self) -> list[tuple[str, str, int, int, str]]:
         """Retrieve all entities from the database.
 

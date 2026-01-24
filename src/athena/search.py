@@ -1,7 +1,7 @@
-"""BM25-based docstring search for code navigation.
+"""FTS5-based docstring search for code navigation.
 
-This module provides efficient docstring-based search functionality using BM25
-ranking algorithm with code-aware tokenization and SQLite-based caching.
+This module provides efficient docstring-based search functionality using SQLite
+FTS5 (Full-Text Search) with BM25 ranking and SQLite-based caching.
 """
 
 import logging
@@ -9,7 +9,6 @@ import os
 import sqlite3
 from pathlib import Path
 
-from athena.bm25_searcher import BM25Searcher
 from athena.cache import CacheDatabase, CachedEntity
 from athena.config import SearchConfig, load_search_config
 from athena.models import Location, SearchResult
@@ -301,42 +300,10 @@ def _scan_repo_with_cache(root: Path, cache_db: CacheDatabase) -> list[tuple[str
     # Clean up deleted files from cache
     cache_db.delete_files_not_in(seen_files)
 
-    # Load all entities from cache for BM25 search
-    cached_entities = cache_db.get_all_entities()
-
-    # Convert from cache format (kind, file_path, start, end, summary)
-    # to search format (kind, path, extent, docstring)
-    return [
-        (kind, path, Location(start=start, end=end), summary)
-        for kind, path, start, end, summary in cached_entities
-    ]
+    # Return empty list - we'll query FTS5 directly instead of loading all entities
+    return []
 
 
-def _scan_repo_without_cache(root: Path) -> list[tuple[str, str, Location, str]]:
-    """Scan repository and parse all entities without caching.
-
-    Fallback method when cache operations fail. Parses all Python files
-    directly without any caching.
-
-    Args:
-        root: Repository root directory.
-
-    Returns:
-        List of (kind, path, extent, docstring) tuples for all entities with docstrings.
-    """
-    entities_with_docs = []
-
-    for py_file in find_python_files(root):
-        try:
-            source_code = py_file.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            # Skip unreadable files
-            continue
-
-        relative_path = py_file.relative_to(root).as_posix()
-        entities_with_docs.extend(_parse_file_entities(py_file, source_code, relative_path))
-
-    return entities_with_docs
 
 
 def search_docstrings(
@@ -344,7 +311,11 @@ def search_docstrings(
     root: Path | None = None,
     config: SearchConfig | None = None
 ) -> list[SearchResult]:
-    """Search docstrings using BM25 ranking and return top-k results.
+    """Search docstrings using FTS5 with two-tier strategy and return top-k results.
+
+    Uses a two-tier search approach:
+    1. Tier 1: Exact phrase matches (highest priority)
+    2. Tier 2: Standard FTS5 matches with BM25 ranking (if needed to fill max_results)
 
     Args:
         query: Natural language search query.
@@ -352,11 +323,12 @@ def search_docstrings(
         config: Search configuration. If None, loads from .athena file.
 
     Returns:
-        List of SearchResult objects sorted by relevance (BM25 score descending).
+        List of SearchResult objects sorted by relevance (phrase matches first, then BM25).
         Returns empty list if query is empty or no matches found.
 
     Raises:
         RepositoryNotFoundError: If root is None and no repository found.
+        sqlite3.Error: If cache operations fail.
 
     Examples:
         >>> results = search_docstrings("JWT authentication")
@@ -377,38 +349,37 @@ def search_docstrings(
     if config is None:
         config = load_search_config(root)
 
-    # Get entities with docstrings using SQLite cache with fallback
+    # Scan repository to update cache
     cache_dir = root / ".athena-cache"
-    try:
-        with CacheDatabase(cache_dir) as cache_db:
-            entities_with_docs = _scan_repo_with_cache(root, cache_db)
-    except (sqlite3.Error, RuntimeError, OSError) as e:
-        # Cache operations failed - fall back to non-cached search
-        logger.warning(f"Cache operations failed ({e}), falling back to non-cached search")
-        entities_with_docs = _scan_repo_without_cache(root)
+    with CacheDatabase(cache_dir) as cache_db:
+        _scan_repo_with_cache(root, cache_db)
 
-    if not entities_with_docs:
-        return []
+        # Tier 1: Exact phrase match
+        phrase_ids = cache_db.query_phrase(query, config.max_results)
 
-    # Build corpus and metadata
-    docstrings = [doc for _, _, _, doc in entities_with_docs]
-    metadata = [(kind, path, extent) for kind, path, extent, _ in entities_with_docs]
+        # Tier 2: Standard FTS5 if needed
+        remaining = config.max_results - len(phrase_ids)
+        if remaining > 0:
+            standard_ids = cache_db.query_words(
+                query, remaining, exclude_ids=set(phrase_ids)
+            )
+            all_ids = phrase_ids + standard_ids
+        else:
+            all_ids = phrase_ids[:config.max_results]
 
-    # Perform BM25 search
-    searcher = BM25Searcher(docstrings, k1=config.k1, b=config.b)
-    results = searcher.search(query.lower(), k=config.k)
-
-    # Filter out zero-score results (no actual matches)
-    # BM25 returns score 0 when none of the query terms appear in the document
-    filtered_results = [(idx, score) for idx, score in results if score > 0]
-
-    # Convert to SearchResult objects
-    search_results = []
-    for idx, _score in filtered_results:
-        kind, path, extent = metadata[idx]
-        docstring = docstrings[idx]
-        search_results.append(
-            SearchResult(kind=kind, path=path, extent=extent, summary=docstring)
-        )
+        # Convert entity IDs to SearchResult objects
+        search_results = []
+        for entity_id in all_ids:
+            entity = cache_db.get_entity_by_id(entity_id)
+            if entity:
+                kind, path, start, end, summary = entity
+                search_results.append(
+                    SearchResult(
+                        kind=kind,
+                        path=path,
+                        extent=Location(start=start, end=end),
+                        summary=summary
+                    )
+                )
 
     return search_results

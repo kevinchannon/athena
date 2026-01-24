@@ -348,6 +348,42 @@ def test_get_all_entities_multiple_files(cache_db):
     assert "src/file2.py" in file_paths
 
 
+def test_get_entity_by_id(cache_db):
+    """Test retrieving a single entity by ID."""
+    file_id = cache_db.insert_file("src/module.py", 1234567890.0)
+
+    cache_db.insert_entities(file_id, [
+        CachedEntity(file_id, "function", "foo", "src/module.py:foo", 10, 20, "Foo function"),
+        CachedEntity(file_id, "class", "Bar", "src/module.py:Bar", 25, 50, "Bar class")
+    ])
+
+    # Get the first entity (ID should be 1)
+    entity = cache_db.get_entity_by_id(1)
+    assert entity is not None
+    kind, path, start, end, summary = entity
+    assert kind == "function"
+    assert path == "src/module.py"
+    assert start == 10
+    assert end == 20
+    assert summary == "Foo function"
+
+    # Get the second entity (ID should be 2)
+    entity = cache_db.get_entity_by_id(2)
+    assert entity is not None
+    kind, path, start, end, summary = entity
+    assert kind == "class"
+    assert path == "src/module.py"
+    assert start == 25
+    assert end == 50
+    assert summary == "Bar class"
+
+
+def test_get_entity_by_id_nonexistent(cache_db):
+    """Test retrieving a non-existent entity returns None."""
+    entity = cache_db.get_entity_by_id(999)
+    assert entity is None
+
+
 def test_context_manager(temp_cache_dir):
     """Test that context manager properly opens and closes database."""
     with CacheDatabase(temp_cache_dir) as db:
