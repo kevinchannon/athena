@@ -316,8 +316,7 @@ class TestSearchDocstrings:
         file.write_text('"""Authentication module."""\n')
 
         results = search_docstrings("xyzabc123notfound", root=tmp_path)
-        # BM25 might return low-scored results, but with proper tokenization
-        # completely unrelated terms should return empty or very low scores
+        # FTS5 might return low-scored results for unrelated terms
         # For this test, we just verify it doesn't crash
         assert isinstance(results, list)
 
@@ -349,7 +348,7 @@ class Auth:
         assert "method" in kinds
 
     def test_search_ranking_order(self, tmp_path):
-        """Verify results are returned in descending BM25 score order."""
+        """Verify results are returned in descending FTS5 relevance order."""
         (tmp_path / ".git").mkdir()
         file1 = tmp_path / "exact.py"
         file1.write_text('"""JWT authentication handler."""\n')
@@ -398,7 +397,7 @@ class Auth:
         # This test should work if run from within athena repository
         # Just verify it doesn't crash
         try:
-            results = search_docstrings("BM25", root=None)
+            results = search_docstrings("search", root=None)
             assert isinstance(results, list)
         except RepositoryNotFoundError:
             # If we're not in a git repo, that's expected

@@ -1324,7 +1324,7 @@ def test_query_words_empty_exclude_set(cache_db):
 
 
 def test_query_words_bm25_ranking(cache_db):
-    """Test standard query ranks documents by BM25 score."""
+    """Test standard query ranks documents by FTS5 relevance score."""
     file_id = cache_db.insert_file("src/example.py", 1234567890.0)
 
     cache_db.insert_entities(file_id, [
@@ -1346,7 +1346,7 @@ def test_query_words_bm25_ranking(cache_db):
     )
     names = [row[0] for row in cursor.fetchall()]
 
-    # First result should be func1 (highest BM25 score)
+    # First result should be func1 (highest FTS5 score)
     assert names[0] == "func1"
 
 
@@ -1455,8 +1455,8 @@ def test_fts5_ranking_fts_aligned(cache_db):
     # Test 2: No phrase, full term coverage
     # Query: "one three five"
     # Expected: Docs 1, 4, 6 contain all three terms
-    # Note: With OR logic, FTS5 BM25 doesn't guarantee docs with more matching terms
-    # rank higher - shorter docs matching fewer terms well can rank higher.
+    # Note: With OR logic, FTS5 doesn't guarantee docs with more matching terms
+    # rank higher - shorter docs matching fewer terms can rank higher due to length normalization.
     standard_results = cache_db.query_words("one three five", limit=10, exclude_ids=set())
 
     # Verify that docs containing the terms are present (but not ordering)
