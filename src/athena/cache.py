@@ -5,6 +5,7 @@ reducing search latency by avoiding repeated AST parsing of unchanged files.
 """
 
 import logging
+import re
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -54,25 +55,48 @@ class CacheDatabase:
     def _open(self) -> None:
         """Open database connection and initialize schema.
 
+        Retries on "database is locked" errors to handle concurrent cache creation.
+
         Raises:
-            sqlite3.Error: If database cannot be opened or initialized.
+            sqlite3.Error: If database cannot be opened or initialized after retries.
         """
-        try:
-            self.conn = sqlite3.connect(
-                str(self.db_path),
-                check_same_thread=False,
-                timeout=10.0  # 10 second timeout for busy database
-            )
-            self.conn.execute("PRAGMA foreign_keys = ON")
-            self.conn.execute("PRAGMA journal_mode = WAL")
-            self.conn.execute("PRAGMA busy_timeout = 10000")  # 10 seconds in milliseconds
-            self.create_tables()
-        except sqlite3.Error as e:
-            logger.error(f"Failed to open cache database at {self.db_path}: {e}")
-            if self.conn:
-                self.conn.close()
-                self.conn = None
-            raise
+        import time
+
+        max_retries = 3
+        retry_delay = 0.1  # 100ms
+
+        for attempt in range(max_retries):
+            try:
+                self.conn = sqlite3.connect(
+                    str(self.db_path),
+                    check_same_thread=False,
+                    timeout=10.0  # 10 second timeout for busy database
+                )
+                self.conn.execute("PRAGMA foreign_keys = ON")
+                self.conn.execute("PRAGMA journal_mode = WAL")
+                self.conn.execute("PRAGMA busy_timeout = 10000")  # 10 seconds in milliseconds
+                self.create_tables()
+                return  # Success
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    # Retry after a brief delay
+                    if self.conn:
+                        self.conn.close()
+                        self.conn = None
+                    time.sleep(retry_delay)
+                    continue
+                # Re-raise if not a lock error or out of retries
+                logger.error(f"Failed to open cache database at {self.db_path}: {e}")
+                if self.conn:
+                    self.conn.close()
+                    self.conn = None
+                raise
+            except sqlite3.Error as e:
+                logger.error(f"Failed to open cache database at {self.db_path}: {e}")
+                if self.conn:
+                    self.conn.close()
+                    self.conn = None
+                raise
 
     def create_tables(self) -> None:
         """Create database schema if it doesn't exist."""
@@ -189,6 +213,7 @@ class CacheDatabase:
 
         Raises:
             RuntimeError: If database connection not initialized.
+            sqlite3.IntegrityError: If file_path already exists (UNIQUE constraint).
             sqlite3.Error: If database operation fails.
         """
         if self.conn is None:
@@ -203,6 +228,12 @@ class CacheDatabase:
                 if not self._in_transaction:
                     self.conn.commit()
                 return cursor.lastrowid
+            except sqlite3.IntegrityError:
+                # UNIQUE constraint - file already exists
+                # This is expected in concurrent scenarios
+                if not self._in_transaction:
+                    self.conn.rollback()
+                raise
             except sqlite3.Error as e:
                 logger.error(f"Failed to insert file {file_path}: {e}")
                 if not self._in_transaction:
@@ -430,6 +461,39 @@ class CacheDatabase:
                     self.conn.rollback()
                 raise
 
+    def get_entity_by_id(self, entity_id: int) -> tuple[str, str, int, int, str] | None:
+        """Retrieve a single entity by its ID.
+
+        Args:
+            entity_id: The entity ID to retrieve
+
+        Returns:
+            Tuple (kind, path, start, end, summary) if entity exists, None otherwise
+
+        Raises:
+            RuntimeError: If database connection not initialized.
+            sqlite3.Error: If database operation fails.
+        """
+        if self.conn is None:
+            raise RuntimeError("Database connection not initialized")
+
+        with self._lock:
+            try:
+                cursor = self.conn.execute(
+                    """
+                    SELECT e.kind, f.file_path, e.start, e.end, e.summary
+                    FROM entities e
+                    JOIN files f ON e.file_id = f.id
+                    WHERE e.id = ?
+                    """,
+                    (entity_id,)
+                )
+                result = cursor.fetchone()
+                return result if result else None
+            except sqlite3.Error as e:
+                logger.error(f"Failed to retrieve entity {entity_id}: {e}")
+                raise
+
     def get_all_entities(self) -> list[tuple[str, str, int, int, str]]:
         """Retrieve all entities from the database.
 
@@ -527,8 +591,18 @@ class CacheDatabase:
             try:
                 # Transform query to OR multiple terms together
                 # FTS5 defaults to AND, so we need explicit OR operators
-                terms = query.split()
-                or_query = " OR ".join(terms)
+                # Remove FTS5 special characters that could cause syntax errors
+                sanitized_query = re.sub(r'[^\w\s-]', ' ', query)
+                # Filter out: empty strings, standalone hyphens, FTS5 operators, and tokens that are just punctuation
+                terms = [
+                    t for t in sanitized_query.split()
+                    if t and t != '-' and t.upper() not in ('OR', 'AND', 'NOT') and re.search(r'\w', t)
+                ]
+                or_query = " OR ".join(terms) if terms else ""
+
+                # Return empty if no valid terms
+                if not or_query:
+                    return []
 
                 if exclude_ids:
                     placeholders = ",".join("?" * len(exclude_ids))

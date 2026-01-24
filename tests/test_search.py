@@ -1,4 +1,4 @@
-"""Tests for BM25 docstring search functionality."""
+"""Tests for FTS5 docstring search functionality."""
 
 import sqlite3
 import tempfile
@@ -15,7 +15,6 @@ from athena.search import (
     _parse_file_entities,
     _process_file_with_cache,
     _scan_repo_with_cache,
-    _scan_repo_without_cache,
     search_docstrings,
 )
 
@@ -1194,60 +1193,10 @@ class Authenticator:
 
 
 class TestSearchErrorHandling:
-    """Tests for search error handling and fallback mechanisms."""
+    """Tests for search error handling (no fallback - errors propagate)."""
 
-    def test_scan_repo_without_cache(self, tmp_path):
-        """Verify _scan_repo_without_cache works correctly."""
-        # Create a test repository
-        (tmp_path / ".git").mkdir()
-        test_file = tmp_path / "test.py"
-        test_file.write_text('''def my_function():
-    """Test function."""
-    pass
-''')
-
-        entities = _scan_repo_without_cache(tmp_path)
-
-        assert len(entities) == 1
-        kind, path, extent, docstring = entities[0]
-        assert kind == "function"
-        assert path == "test.py"
-        assert isinstance(extent, Location)
-        assert docstring == "Test function."
-
-    def test_scan_repo_without_cache_handles_unreadable_files(self, tmp_path):
-        """Verify _scan_repo_without_cache skips unreadable files."""
-        # Create a test repository
-        (tmp_path / ".git").mkdir()
-
-        # Create a readable file
-        readable_file = tmp_path / "readable.py"
-        readable_file.write_text('''def readable_func():
-    """Readable function."""
-    pass
-''')
-
-        # Create a file that will fail to read
-        unreadable_file = tmp_path / "unreadable.py"
-        unreadable_file.write_text("valid python")
-
-        # Mock read_text to fail for unreadable file
-        original_read_text = Path.read_text
-
-        def mock_read_text(self, *args, **kwargs):
-            if self.name == "unreadable.py":
-                raise UnicodeDecodeError("utf-8", b"", 0, 1, "mock error")
-            return original_read_text(self, *args, **kwargs)
-
-        with patch.object(Path, "read_text", mock_read_text):
-            entities = _scan_repo_without_cache(tmp_path)
-
-        # Should only get the readable file
-        assert len(entities) == 1
-        assert entities[0][1] == "readable.py"
-
-    def test_search_falls_back_to_non_cached_on_db_error(self, tmp_path):
-        """Verify search falls back to non-cached mode when cache fails."""
+    def test_search_raises_on_db_error(self, tmp_path):
+        """Verify search raises error when cache fails (no fallback)."""
         # Create a test repository
         (tmp_path / ".git").mkdir()
         test_file = tmp_path / "test.py"
@@ -1260,14 +1209,12 @@ class TestSearchErrorHandling:
         with patch("athena.search.CacheDatabase") as mock_cache:
             mock_cache.return_value.__enter__.side_effect = sqlite3.Error("DB corrupted")
 
-            # Search should still work via fallback
-            results = search_docstrings("authenticate", root=tmp_path)
+            # Search should raise the error (no fallback)
+            with pytest.raises(sqlite3.Error, match="DB corrupted"):
+                search_docstrings("authenticate", root=tmp_path)
 
-            assert len(results) >= 1
-            assert any("authenticate" in r.summary.lower() for r in results)
-
-    def test_search_falls_back_on_runtime_error(self, tmp_path):
-        """Verify search falls back on RuntimeError."""
+    def test_search_raises_on_runtime_error(self, tmp_path):
+        """Verify search raises RuntimeError (no fallback)."""
         # Create a test repository
         (tmp_path / ".git").mkdir()
         test_file = tmp_path / "test.py"
@@ -1279,13 +1226,11 @@ class TestSearchErrorHandling:
         with patch("athena.search.CacheDatabase") as mock_cache:
             mock_cache.return_value.__enter__.side_effect = RuntimeError("Connection failed")
 
-            results = search_docstrings("process", root=tmp_path)
+            with pytest.raises(RuntimeError, match="Connection failed"):
+                search_docstrings("process", root=tmp_path)
 
-            assert len(results) >= 1
-            assert any("process" in r.summary.lower() for r in results)
-
-    def test_search_falls_back_on_os_error(self, tmp_path):
-        """Verify search falls back on OSError (e.g., permission denied)."""
+    def test_search_raises_on_os_error(self, tmp_path):
+        """Verify search raises OSError (no fallback)."""
         # Create a test repository
         (tmp_path / ".git").mkdir()
         test_file = tmp_path / "test.py"
@@ -1297,59 +1242,8 @@ class TestSearchErrorHandling:
         with patch("athena.search.CacheDatabase") as mock_cache:
             mock_cache.return_value.__enter__.side_effect = OSError("Permission denied")
 
-            results = search_docstrings("validate", root=tmp_path)
-
-            assert len(results) >= 1
-            assert any("validate" in r.summary.lower() for r in results)
-
-    def test_search_cache_failure_during_scan(self, tmp_path):
-        """Verify search handles cache failure during repository scan."""
-        # Create a test repository
-        (tmp_path / ".git").mkdir()
-        test_file = tmp_path / "test.py"
-        test_file.write_text('''def calculate():
-    """Calculate result."""
-    pass
-''')
-
-        # Create cache that fails during scan
-        with patch("athena.search._scan_repo_with_cache") as mock_scan:
-            mock_scan.side_effect = sqlite3.Error("DB locked during scan")
-
-            # Should fall back to non-cached search
-            results = search_docstrings("calculate", root=tmp_path)
-
-            assert len(results) >= 1
-            assert any("calculate" in r.summary.lower() for r in results)
-
-    def test_fallback_preserves_search_functionality(self, tmp_path):
-        """Verify fallback mode produces same results as cached mode."""
-        # Create a test repository
-        (tmp_path / ".git").mkdir()
-        test_file = tmp_path / "test.py"
-        test_file.write_text('''def search_function():
-    """Search for items."""
-    pass
-
-def other_function():
-    """Other functionality."""
-    pass
-''')
-
-        # Get results with cache
-        results_cached = search_docstrings("search items", root=tmp_path)
-
-        # Get results without cache (force fallback)
-        with patch("athena.search.CacheDatabase") as mock_cache:
-            mock_cache.return_value.__enter__.side_effect = sqlite3.Error("Force fallback")
-            results_fallback = search_docstrings("search items", root=tmp_path)
-
-        # Results should be equivalent (same entities found)
-        assert len(results_cached) == len(results_fallback)
-
-        cached_paths = {r.path for r in results_cached}
-        fallback_paths = {r.path for r in results_fallback}
-        assert cached_paths == fallback_paths
+            with pytest.raises(OSError, match="Permission denied"):
+                search_docstrings("validate", root=tmp_path)
 
 
 class TestConcurrentSearchAccess:
