@@ -1342,12 +1342,12 @@ def test_fts5_ranking_fts_aligned(cache_db):
     entities = []
     for i, content in enumerate(corpus_content, start=1):
         entities.append(CachedEntity(
-            file_id, "function", f"func_{i}", f"src/example.py:func_{i}",
+            file_id, "function", f"func_{i:02d}", f"src/example.py:func_{i:02d}",
             i * 10, i * 10 + 10, content
         ))
     cache_db.insert_entities(file_id, entities)
 
-    # Get entity IDs in order
+    # Get entity IDs in order (now sorted correctly with zero-padded names)
     cursor = cache_db.conn.execute(
         "SELECT id FROM entities WHERE file_id = ? ORDER BY name",
         (file_id,)
