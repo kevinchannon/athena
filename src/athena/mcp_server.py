@@ -4,7 +4,6 @@ This server wraps the `ack` CLI tool, providing structured access to code
 navigation capabilities through the Model Context Protocol.
 """
 
-import json
 import subprocess
 from typing import Any
 
@@ -143,43 +142,21 @@ async def _handle_locate(entity: str) -> list[TextContent]:
         entity: Name of the entity to locate
 
     Returns:
-        List containing a single TextContent with JSON results
+        List containing a single TextContent with text results
     """
     try:
-        # Call the CLI tool
+        # Call the CLI tool (without -j flag for text output)
         result = subprocess.run(
-            ["athena", "locate", "-j", entity],
+            ["athena", "locate", entity],
             capture_output=True,
             text=True,
             check=True,
         )
 
-        # Parse JSON output from CLI
-        locations = json.loads(result.stdout)
-
-        if not locations:
-            return [
-                TextContent(
-                    type="text",
-                    text=f"No entities found with name '{entity}'",
-                )
-            ]
-
-        # Format results for Claude Code
-        formatted_results = []
-        for loc in locations:
-            kind = loc["kind"]
-            path = loc["path"]
-            start = loc["extent"]["start"]
-            end = loc["extent"]["end"]
-            formatted_results.append(
-                f"{kind} '{entity}' found in {path} (lines {start}-{end})"
-            )
-
         return [
             TextContent(
                 type="text",
-                text="\n".join(formatted_results),
+                text=result.stdout.strip(),
             )
         ]
 
@@ -189,13 +166,6 @@ async def _handle_locate(entity: str) -> list[TextContent]:
             TextContent(
                 type="text",
                 text=f"Error running ack locate: {error_msg}",
-            )
-        ]
-    except json.JSONDecodeError as e:
-        return [
-            TextContent(
-                type="text",
-                text=f"Error parsing ack output: {e}",
             )
         ]
     except Exception as e:
@@ -216,10 +186,10 @@ async def _handle_info(location: str) -> list[TextContent]:
                  or "directory_path" for package info
 
     Returns:
-        List containing a single TextContent with JSON results
+        List containing a single TextContent with results (JSON format)
     """
     try:
-        # Call the CLI tool
+        # Call the CLI tool (info command outputs JSON by default)
         result = subprocess.run(
             ["athena", "info", location],
             capture_output=True,
@@ -227,14 +197,10 @@ async def _handle_info(location: str) -> list[TextContent]:
             check=True,
         )
 
-        # Parse JSON output from CLI
-        entity_info = json.loads(result.stdout)
-
-        # Return formatted JSON
         return [
             TextContent(
                 type="text",
-                text=json.dumps(entity_info, indent=2),
+                text=result.stdout.strip(),
             )
         ]
 
@@ -244,13 +210,6 @@ async def _handle_info(location: str) -> list[TextContent]:
             TextContent(
                 type="text",
                 text=f"Error running ack info: {error_msg}",
-            )
-        ]
-    except json.JSONDecodeError as e:
-        return [
-            TextContent(
-                type="text",
-                text=f"Error parsing ack output: {e}",
             )
         ]
     except Exception as e:
@@ -270,11 +229,11 @@ async def _handle_status(entity: str, recursive: bool) -> list[TextContent]:
         recursive: Whether to check recursively
 
     Returns:
-        List containing a single TextContent with JSON results
+        List containing a single TextContent with text results
     """
     try:
-        # Build command with flags
-        cmd = ["athena", "status", "--json"]
+        # Build command with flags (without --json for text output)
+        cmd = ["athena", "status"]
         if recursive:
             cmd.append("--recursive")
         cmd.append(entity)
@@ -287,14 +246,10 @@ async def _handle_status(entity: str, recursive: bool) -> list[TextContent]:
             check=True,
         )
 
-        # Parse JSON output from CLI
-        status_data = json.loads(result.stdout)
-
-        # Return formatted JSON
         return [
             TextContent(
                 type="text",
-                text=json.dumps(status_data, indent=2),
+                text=result.stdout.strip(),
             )
         ]
 
@@ -304,13 +259,6 @@ async def _handle_status(entity: str, recursive: bool) -> list[TextContent]:
             TextContent(
                 type="text",
                 text=f"Error running ack status: {error_msg}",
-            )
-        ]
-    except json.JSONDecodeError as e:
-        return [
-            TextContent(
-                type="text",
-                text=f"Error parsing ack output: {e}",
             )
         ]
     except Exception as e:
@@ -329,44 +277,21 @@ async def _handle_search(query: str) -> list[TextContent]:
         query: A string to try and match entities in the codebase with
 
     Returns:
-        List containing a single TextContent with JSON results
+        List containing a single TextContent with text results
     """
     try:
-        # Call the CLI tool
+        # Call the CLI tool (without -j flag for text output)
         result = subprocess.run(
-            ["athena", "search", "-j", query],
+            ["athena", "search", query],
             capture_output=True,
             text=True,
             check=True,
         )
 
-        # Parse JSON output from CLI
-        entities = json.loads(result.stdout)
-
-        if not entities:
-            return [
-                TextContent(
-                    type="text",
-                    text=f"No entities found with query '{query}'",
-                )
-            ]
-
-        # Format results for Claude Code
-        formatted_results = []
-        for entity in entities:
-            kind = entity["kind"]
-            path = entity["path"]
-            start = entity["extent"]["start"]
-            end = entity["extent"]["end"]
-            summary = entity["summary"]
-            formatted_results.append(
-                f"{kind} '{entity}' found in {path} (lines {start}-{end})\n   Summary:\n{summary}"
-            )
-
         return [
             TextContent(
                 type="text",
-                text="\n".join(formatted_results),
+                text=result.stdout.strip(),
             )
         ]
 
@@ -376,13 +301,6 @@ async def _handle_search(query: str) -> list[TextContent]:
             TextContent(
                 type="text",
                 text=f"Error running ack search: {error_msg}",
-            )
-        ]
-    except json.JSONDecodeError as e:
-        return [
-            TextContent(
-                type="text",
-                text=f"Error parsing ack output: {e}",
             )
         ]
     except Exception as e:
