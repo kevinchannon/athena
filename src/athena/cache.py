@@ -523,14 +523,14 @@ class CacheDatabase:
         """Query for exact phrase matches.
 
         Uses FTS5 phrase syntax to find entities where the summary contains
-        the exact query string as a phrase. Results are ranked by BM25.
+        the exact query string as a phrase. Results are ranked by FTS5's internal scoring.
 
         Args:
             query: Search query string (will be searched as exact phrase)
             limit: Maximum number of entity IDs to return
 
         Returns:
-            List of entity IDs matching the phrase, ordered by BM25 rank (best first)
+            List of entity IDs matching the phrase, ordered by relevance (best first)
 
         Raises:
             RuntimeError: If database connection not initialized.
@@ -566,7 +566,7 @@ class CacheDatabase:
     def query_words(self, query: str, limit: int, exclude_ids: set[int]) -> list[int]:
         """Query for individual words (OR'd together).
 
-        Terms can appear anywhere in the text. Results are ranked by BM25.
+        Terms can appear anywhere in the text. Results are ranked by FTS5's internal scoring.
 
         Args:
             query: Search query string (terms will be OR'd together)
@@ -574,7 +574,7 @@ class CacheDatabase:
             exclude_ids: Set of entity IDs to exclude from results (e.g., already matched by phrase search)
 
         Returns:
-            List of entity IDs matching the query, ordered by BM25 rank (best first),
+            List of entity IDs matching the query, ordered by relevance (best first),
             excluding any IDs in exclude_ids
 
         Raises:

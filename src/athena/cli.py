@@ -74,10 +74,11 @@ def search(
     json: bool = typer.Option(False, "--json", "-j", help="Output as JSON instead of table"),
     max_results: Optional[int] = typer.Option(None, "--max-results", "-k", help="Maximum number of results to return"),
 ):
-    """Search docstrings using BM25 ranking.
+    """Search docstrings using FTS5 full-text search.
 
     Searches all docstrings in the repository using natural language queries
-    with BM25 ranking algorithm and code-aware tokenization.
+    with FTS5 full-text search and two-tier ranking (exact phrase matches first,
+    then standard FTS5 matches).
 
     Args:
         query: Natural language search query
@@ -87,7 +88,7 @@ def search(
     Examples:
         athena search "JWT authentication"
         athena search "parse configuration file" --max-results 5
-        athena search "BM25 scoring" --json
+        athena search "full text search" --json
     """
     try:
         # Load config and override max_results if specified

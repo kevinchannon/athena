@@ -1,7 +1,8 @@
 """FTS5-based docstring search for code navigation.
 
 This module provides efficient docstring-based search functionality using SQLite
-FTS5 (Full-Text Search) with BM25 ranking and SQLite-based caching.
+FTS5 (Full-Text Search) with SQLite-based caching. FTS5 uses BM25 ranking internally
+to score search results.
 """
 
 import logging
@@ -266,7 +267,7 @@ def _process_file_with_cache(
 
     # File is up-to-date in cache - no need to parse
     # We don't return cached entities here since we'll load all entities
-    # at once in the next phase for BM25 search
+    # at once in the next phase for FTS5 search
     return []
 
 
@@ -324,7 +325,7 @@ def search_docstrings(
 
     Uses a two-tier search approach:
     1. Tier 1: Exact phrase matches (highest priority)
-    2. Tier 2: Standard FTS5 matches with BM25 ranking (if needed to fill max_results)
+    2. Tier 2: Standard FTS5 matches (if needed to fill max_results)
 
     Args:
         query: Natural language search query.
@@ -332,7 +333,7 @@ def search_docstrings(
         config: Search configuration. If None, loads from .athena file.
 
     Returns:
-        List of SearchResult objects sorted by relevance (phrase matches first, then BM25).
+        List of SearchResult objects sorted by relevance (phrase matches first, then FTS5 scored).
         Returns empty list if query is empty or no matches found.
 
     Raises:

@@ -77,7 +77,7 @@ If you want to search for entities based on what they do (rather than their name
  function  src/athena/parsers/utils.py      45-67    Parse a Python file and return its AST
 ```
 
-The search command uses BM25 ranking to find the most relevant entities based on their docstrings. You can customize the number of results:
+The search command uses FTS5 full-text search to find the most relevant entities based on their docstrings. Exact phrase matches rank highest, followed by standard FTS5-scored results. You can customize the number of results:
 ```bash
 > athena search --max-results 5 "authentication"
 > athena search -k 3 "JWT token"  # Short form
