@@ -71,3 +71,4 @@ dmypy.json
 
 requirements/*
 /.tasktree-state
+.athena-cache
